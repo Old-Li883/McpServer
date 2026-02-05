@@ -1,0 +1,25 @@
+# Build directories
+build/
+cmake-build-*/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# vcpkg
+vcpkg_installed/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Executable
+McpServer
+
+# OS
+.DS_Store
