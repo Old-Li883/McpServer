@@ -36,7 +36,7 @@ void StdioJsonRpc::setErrorCallback(MessageCallback callback) {
 // ========== 同步操作 ==========
 
 bool StdioJsonRpc::readAndProcess() {
-    auto message = readLine();
+    auto message = readMessage();
     if (!message.has_value()) {
         return false;
     }
@@ -51,7 +51,13 @@ bool StdioJsonRpc::sendMessage(const std::string& message) {
             std::cerr << "[DEBUG] Sending message: " << message << std::endl;
         }
 
-        std::cout << message << config_.delimiter;
+        if (config_.useLspFormat) {
+            // LSP/MCP 格式: Content-Length: <size>\r\n\r\n<message>
+            std::cout << "Content-Length: " << message.length() << "\r\n\r\n" << message;
+        } else {
+            // 简单行格式
+            std::cout << message << "\n";
+        }
         std::cout.flush();
 
         sentCount_++;
@@ -68,7 +74,7 @@ std::optional<std::string> StdioJsonRpc::sendRequest(const std::string& message)
     }
 
     // 读取响应
-    auto response = readLine();
+    auto response = readMessage();
     if (response.has_value()) {
         receivedCount_++;
     }
@@ -178,7 +184,7 @@ void StdioJsonRpc::flushOutput() {
 
 void StdioJsonRpc::readThreadFunc() {
     while (!shouldStop_.load()) {
-        auto message = readLine();
+        auto message = readMessage();
 
         if (message.has_value()) {
             // 将消息添加到队列
@@ -202,6 +208,88 @@ void StdioJsonRpc::readThreadFunc() {
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
+}
+
+std::optional<std::string> StdioJsonRpc::readMessage() {
+    if (config_.useLspFormat) {
+        return readLspMessage();
+    } else {
+        return readLineMessage();
+    }
+}
+
+std::optional<std::string> StdioJsonRpc::readLspMessage() {
+    try {
+        // 读取 Content-Length 头
+        std::string header;
+        size_t contentLength = 0;
+
+        // 读取所有头行，直到遇到空行
+        while (std::getline(std::cin, header)) {
+            // 移除 \r 如果存在
+            if (!header.empty() && header.back() == '\r') {
+                header.pop_back();
+            }
+
+            // 空行表示头部结束
+            if (header.empty()) {
+                break;
+            }
+
+            // 解析 Content-Length
+            if (header.find("Content-Length:") == 0) {
+                std::string lengthStr = header.substr(15); // 跳过 "Content-Length:"
+                // 去除前导空格
+                size_t start = lengthStr.find_first_not_of(" \t");
+                if (start != std::string::npos) {
+                    lengthStr = lengthStr.substr(start);
+                }
+                try {
+                    contentLength = std::stoul(lengthStr);
+                } catch (const std::exception&) {
+                    setLastError("Invalid Content-Length value: " + lengthStr);
+                    return std::nullopt;
+                }
+            }
+        }
+
+        // 检查是否到达 EOF
+        if (std::cin.eof()) {
+            return std::nullopt;
+        }
+
+        // 验证 Content-Length
+        if (contentLength == 0) {
+            setLastError("Missing or invalid Content-Length header");
+            return std::nullopt;
+        }
+
+        // 检查消息大小限制
+        if (contentLength > config_.maxMessageSize) {
+            setLastError("Message size exceeds limit");
+            return std::nullopt;
+        }
+
+        // 读取指定字节数的 JSON 消息
+        auto message = readBytes(contentLength);
+        if (!message.has_value()) {
+            return std::nullopt;
+        }
+
+        if (config_.enableDebugLog) {
+            std::cerr << "[DEBUG] Received LSP message (" << contentLength << " bytes): "
+                      << message.value() << std::endl;
+        }
+
+        return message;
+    } catch (const std::exception& e) {
+        setLastError("Error reading LSP message: " + std::string(e.what()));
+        return std::nullopt;
+    }
+}
+
+std::optional<std::string> StdioJsonRpc::readLineMessage() {
+    return readLine();
 }
 
 std::optional<std::string> StdioJsonRpc::readLine() {
@@ -240,6 +328,27 @@ std::optional<std::string> StdioJsonRpc::readLine() {
         return line;
     } catch (const std::exception& e) {
         setLastError("Error reading line: " + std::string(e.what()));
+        return std::nullopt;
+    }
+}
+
+std::optional<std::string> StdioJsonRpc::readBytes(size_t size) {
+    try {
+        std::string content;
+        content.resize(size);
+
+        // 读取指定字节数
+        std::cin.read(&content[0], static_cast<std::streamsize>(size));
+
+        // 检查是否成功读取
+        if (static_cast<size_t>(std::cin.gcount()) != size) {
+            setLastError("Failed to read expected number of bytes");
+            return std::nullopt;
+        }
+
+        return content;
+    } catch (const std::exception& e) {
+        setLastError("Error reading bytes: " + std::string(e.what()));
         return std::nullopt;
     }
 }
