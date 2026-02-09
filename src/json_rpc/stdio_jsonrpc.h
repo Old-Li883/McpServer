@@ -23,7 +23,7 @@ struct StdioJsonRpcConfig {
     size_t maxBufferSize = 1024 * 1024;      // 最大缓冲区大小 (1MB)
     size_t maxMessageSize = 64 * 1024 * 1024; // 最大消息大小 (64MB)
     bool enableDebugLog = false;              // 启用调试日志
-    std::string delimiter = "\n";             // 消息分隔符
+    bool useLspFormat = true;                 // 使用 LSP/MCP 格式 (Content-Length 头)
 };
 
 /**
@@ -179,10 +179,35 @@ private:
     void readThreadFunc();
 
     /**
-     * @brief 读取单行消息
+     * @brief 读取单条消息（LSP/MCP 格式或简单行格式）
      * @return 消息字符串
      */
+    [[nodiscard]] std::optional<std::string> readMessage();
+
+    /**
+     * @brief 读取 LSP/MCP 格式消息
+     * @return 消息字符串
+     */
+    [[nodiscard]] std::optional<std::string> readLspMessage();
+
+    /**
+     * @brief 读取简单行格式消息
+     * @return 消息字符串
+     */
+    [[nodiscard]] std::optional<std::string> readLineMessage();
+
+    /**
+     * @brief 读取一行
+     * @return 行内容
+     */
     [[nodiscard]] std::optional<std::string> readLine();
+
+    /**
+     * @brief 读取指定字节数
+     * @param size 要读取的字节数
+     * @return 读取的内容
+     */
+    [[nodiscard]] std::optional<std::string> readBytes(size_t size);
 
     /**
      * @brief 处理接收到的消息
