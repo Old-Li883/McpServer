@@ -1,0 +1,53 @@
+@startuml http_jsonrpc_server_architecture
+title HttpJsonRpcServer 架构与数据流
+
+actor "HTTP Client" as Client
+component "cpp-httplib" as httplib
+component "JSON-RPC Handler" as handler
+component "JsonRpc Protocol" as protocol
+component "Method Handler" as method
+component "SSE Manager" as sse
+component "SSE Clients" as clients
+database "Endpoint Registry" as registry
+
+' JSON-RPC 请求流
+Client -> httplib : 1.POST /{jsonrpc:"2.0",...}
+httplib -> handler : Route
+handler -> protocol : Validate
+protocol -> method : Call
+method -> protocol : Result
+protocol -> httplib : JSON Response
+httplib -> Client : 2.HTTP 200 {result:...}
+
+' SSE 流
+Client -> sse : 3.GET /events
+sse -> registry : Register
+sse -> clients : Store Connections
+method -> sse : Broadcast Event
+sse -> clients : Push Data
+clients -> Client : event:msg\ndata:{...}
+
+note right of httplib
+  <b>配置</b>
+  Host: 0.0.0.0
+  Port: 8080
+  Threads: 4
+end note
+
+note left of protocol
+  <b>方法类型</b>
+  - 同步
+  - 异步
+  - 批量
+  - 通知
+end note
+
+note bottom of sse
+  <b>SSE 功能</b>
+  - 客户端ID
+  - 连接管理
+  - 事件广播
+  - 心跳检测
+end note
+
+@enduml

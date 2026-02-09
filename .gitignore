@@ -1,6 +1,7 @@
 # Build directories
 build/
 cmake-build-*/
+daily
 
 # CMake
 CMakeCache.txt

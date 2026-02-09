@@ -1,0 +1,90 @@
+@startuml http_jsonrpc_server_sequence
+!theme plain
+autonumber
+
+title HttpJsonRpcServer JSON-RPC 请求处理时序图
+
+actor "HTTP Client" as Client
+participant "HttpJsonRpcServer" as HTTP
+participant "cpp-httplib\n(Server)" as Server
+participant "JsonRpc\n(Protocol)" as RPC
+participant "MethodHandler\n(User Code)" as Handler
+participant "SSE Endpoint\n(Optional)" as SSE
+
+== JSON-RPC 请求处理 ==
+
+Client -> HTTP: POST /\n{jsonrpc:"2.0",method:"add",params:[1,2],id:1}
+activate HTTP
+
+HTTP -> Server: 接收 HTTP 请求
+activate Server
+Server -> HTTP: 回调请求处理器
+deactivate Server
+
+HTTP -> RPC: handleRequest(jsonBody)
+activate RPC
+
+RPC -> RPC: 解析 JSON 请求
+RPC -> RPC: 验证请求格式
+
+RPC -> Handler: 调用已注册的方法\nmethod="add", params=[1,2]
+activate Handler
+Handler --> RPC: 返回结果\nresult=3
+deactivate Handler
+
+RPC --> HTTP: 返回响应\n{jsonrpc:"2.0",result:3,id:1}
+deactivate RPC
+
+HTTP -> Server: 设置响应头\nContent-Type: application/json
+activate Server
+Server --> HTTP: 响应准备完成
+deactivate Server
+
+HTTP --> Client: HTTP 200 OK\n{jsonrpc:"2.0",result:3,id:1}
+deactivate HTTP
+
+== SSE 实时推送 (可选) ==
+
+Client -> HTTP: GET /events\n(建立 SSE 连接)
+activate HTTP
+
+HTTP -> Server: 设置 SSE 响应头\nContent-Type: text/event-stream
+activate Server
+Server --> HTTP: 建立持久连接
+deactivate Server
+
+HTTP -> SSE: 生成客户端ID\n连接回调
+activate SSE
+SSE --> HTTP: 连接确认\n{clientId:"abc123"}
+deactivate SSE
+
+HTTP --> Client: event: connected\ndata: {"clientId":"abc123"}\n\n
+
+note over Client,SSE
+    连接保持打开状态
+    服务器可以随时推送事件
+end note
+
+... 随时间推移 ...
+
+Handler -> HTTP: 业务逻辑产生事件\n需要推送
+activate HTTP
+
+HTTP -> SSE: broadcastSseEvent\nevent="update", data={...}
+activate SSE
+SSE --> HTTP: 格式化 SSE 事件
+deactivate SSE
+
+HTTP --> Client: event: update\ndata: {...}\n\n
+
+== 连接关闭 ==
+
+Client -> HTTP: 连接断开
+HTTP -> SSE: 连接断开回调\nconnected=false
+activate SSE
+SSE --> HTTP: 清理客户端资源
+deactivate SSE
+HTTP --> Client: 连接关闭
+deactivate HTTP
+
+@enduml

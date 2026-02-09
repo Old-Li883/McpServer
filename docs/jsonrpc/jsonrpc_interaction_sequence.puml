@@ -1,0 +1,194 @@
+@startuml
+title JSON-RPC 模块交互序列 - Stdio 与 HTTP 双模式
+
+skinparam sequenceArrowColor #546E7A
+skinparam sequenceLifeLineBorderColor #607D8B
+skinparam participantBackgroundColor #E3F2FD
+skinparam noteBackgroundColor #FAFAFA
+skinparam noteBorderColor #9E9E9E
+
+participant "Stdio客户端" as SC #E8F5E9
+participant "StdioJsonRpc\n传输层" as ST #E8F5E9
+participant "HTTP客户端" as HC #FFF3E0
+participant "HttpJsonRpcServer\n传输层" as HT #FFF3E0
+participant "JsonRpc\n核心处理器" as Core #E3F2FD
+participant "业务方法" as Business #F3E5F5
+
+== Stdio 传输模式 ==
+
+SC -> ST : 写入stdin\nContent-Length: xxx\n\n{json}
+activate ST
+
+note right of ST
+  <b>StdioJsonRpc 处理</b>
+  1. 异步读取线程
+  2. 解析 Content-Length
+  3. 读取完整消息体
+  4. 验证 JSON 格式
+end note
+
+ST -> Core : handleRequest(jsonStr)
+activate Core
+
+note right of Core
+  <b>核心处理流程</b>
+  1. 反序列化 JSON
+  2. 验证请求格式
+  3. 查找注册方法
+  4. 参数验证
+end note
+
+Core -> Business : invoke(method, params)
+activate Business
+Business --> Core : 返回结果
+deactivate Business
+
+Core --> ST : 返回响应 JSON
+deactivate Core
+
+note right of ST
+  <b>响应格式</b>
+  Content-Length: xxx\n\n
+  { "jsonrpc": "2.0",\n    "result": ..., \n    "id": xxx }
+end note
+
+ST -> SC : 写入stdout\nContent-Length: xxx\n\n{json}
+deactivate ST
+
+== 批量请求 (Batch) ==
+
+SC -> ST : 批量请求\n[{req1}, {req2}, ...]
+ST -> Core : handleBatchRequest()
+activate Core
+
+note right of Core
+  <b>批量处理</b>
+  遍历每个请求
+  并行或串行处理
+  收集所有响应
+end note
+
+loop 每个请求
+    Core -> Business : invoke()
+    Business --> Core : result
+end
+
+Core --> ST : 批量响应\n[{res1}, {res2}, ...]
+deactivate Core
+ST --> SC : 批量响应
+
+== 通知 (Notification - 无响应) ==
+
+SC -> ST : 通知消息\n{"method":"event","params":...}
+ST -> Core : handleRequest(notification)
+activate Core
+
+note right of Core
+  <b>通知处理</b>
+  无 id 字段
+  不返回响应
+  异步处理
+end note
+
+Core -> Business : handleEvent()
+deactivate Core
+
+note right of SC
+  <b>不等待响应</b>\n客户端立即继续
+end note
+
+== HTTP 传输模式 ==
+
+HC -> HT : POST /rpc\nContent-Type: application/json\n{json}
+activate HT
+
+note right of HT
+  <b>HTTP 处理</b>
+  1. 接收 HTTP 请求
+  2. 解析 JSON body
+  3. 线程池分配
+  4. 调用 JSON-RPC 处理
+end note
+
+HT -> Core : handleRequest(jsonStr)
+activate Core
+Core -> Business : invoke(method, params)
+activate Business
+Business --> Core : 返回结果
+deactivate Business
+Core --> HT : 返回响应 JSON
+deactivate Core
+
+HT --> HC : HTTP 200 OK\nContent-Type: application/json\n{json}
+deactivate HT
+
+== SSE 服务端推送 ==
+
+HC -> HT : GET /events\nAccept: text/event-stream
+activate HT
+
+note right of HT
+  <b>SSE 连接建立</b>
+  1. 注册端点
+  2. 分配 clientId
+  3. 保持长连接
+  4. 心跳检测
+end note
+
+HT --> HC : HTTP 200 OK\nContent-Type: text/event-stream
+
+== SSE 连接保持活跃 ==
+
+Business -> HT : 需要推送事件
+HT -> HC : data: {json}\n\n
+
+note left of HT
+  <b>SSE 事件格式</b>
+  data: {事件数据}\n\n
+  event: 事件类型\n\n
+  id: 事件ID\n\n
+  retry: 重连时间
+end note
+
+deactivate HT
+
+== 错误处理 ==
+
+HC -> HT : POST /rpc\n{无效请求}
+HT -> Core : handleRequest(invalid)
+activate Core
+
+note right of Core
+  <b>错误响应</b>
+  Parse Error: -32700
+  Invalid Request: -32600
+  Method Not Found: -32601
+  Invalid Params: -32602
+  Internal Error: -32603
+end note
+
+Core --> HT : 错误响应\n{"jsonrpc":"2.0","error":{...},"id":null}
+deactivate Core
+
+HT --> HC : HTTP 200 OK\n{错误响应}
+deactivate HT
+
+note left of Core
+  <b>异常情况</b>
+  JSON 解析失败\n方法未注册\n参数验证失败\n方法执行异常
+end note
+
+legend right
+  |= 颜色 |= 含义 |
+  | <back:#E8F5E9> Stdio | 标准输入输出传输 |
+  | <back:#FFF3E0> HTTP | HTTP/SSE 传输 |
+  | <back:#E3F2FD> Core | JSON-RPC 核心处理 |
+  | <back:#F3E5F5> 业务 | 业务逻辑方法 |
+
+  <b>关键特性</b>
+  • Stdio: 异步读取、LSP格式、批量支持
+  • HTTP: 线程池、SSE推送、CORS支持
+  • Core: 方法注册、批量请求、通知处理
+endlegend
+
+@enduml

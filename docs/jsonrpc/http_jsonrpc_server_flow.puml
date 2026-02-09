@@ -1,0 +1,123 @@
+@startuml http_jsonrpc_server_flow
+!theme plain
+title HttpJsonRpcServer 请求处理流程图
+
+start
+
+:HTTP Client 发送请求;
+
+:cpp-httplib 接收请求;
+
+switch (检查请求路径和方式)
+
+case (POST / 或 /rpc)
+    :JSON-RPC 请求处理;
+
+    :解析 HTTP 请求体;
+
+    if (请求有效?) then (否)
+        :返回 -32700 错误\nParse Error;
+        stop
+    endif
+
+    :反序列化 JSON 请求;
+    :验证请求格式;
+
+    if (方法已注册?) then (否)
+        :返回 -32601 错误\nMethod Not Found;
+        stop
+    endif
+
+    if (同步方法?) then (是)
+        :调用 MethodHandler;
+        :获取执行结果;
+    else (否)
+        :调用 AsyncMethodHandler;
+        :异步执行;
+        :回调返回结果;
+    endif
+
+    :序列化 JSON 响应;
+
+    :设置响应头\nContent-Type: application/json;
+
+    if (启用 CORS?) then (是)
+        :设置 CORS 头;
+    endif
+
+    :返回 HTTP 响应;
+
+case (GET SSE端点)
+    :SSE 连接建立;
+
+    if (SSE 已启用?) then (否)
+        :返回 404 Not Found;
+        stop
+    endif
+
+    :设置 SSE 响应头\nContent-Type: text/event-stream;
+    :生成唯一客户端 ID;
+    :创建 SseClient 对象;
+    :调用连接回调(connected=true);
+    :发送连接确认事件;
+
+    repeat
+        :等待数据推送;
+        fork
+            :接收广播事件;
+            :格式化 SSE 事件;
+            :写入客户端缓冲区;
+        fork again
+            :接收定向事件;
+            :格式化 SSE 事件;
+            :写入指定客户端缓冲区;
+        fork again
+            :定时心跳检查;
+            if (超时?) then (是)
+                :断开连接;
+            endif
+        end fork
+    repeat while (连接保持活跃?) is (是)
+    ->(否);
+
+    :客户端断开或超时;
+    :调用连接回调(connected=false);
+    :清理客户端资源;
+
+case (GET 自定义路径)
+    :自定义 GET 处理器;
+    :调用注册的 GetHandler;
+    :处理请求参数;
+    :返回自定义响应;
+
+case (POST 自定义路径)
+    :自定义 POST 处理器;
+    :调用注册的 PostHandler;
+    :处理请求体;
+    :返回自定义响应;
+
+case (静态文件路径)
+    :静态文件服务;
+    :检查挂载点;
+    :返回静态文件内容;
+
+case (OPTIONS 请求)
+    :CORS Preflight;
+    :返回 CORS 头;
+    :HTTP 204 No Content;
+
+endswitch
+
+:HTTP Client 接收响应;
+
+stop
+
+legend right
+  |=<#87CEEB> 上游 (HTTP Client) |
+  |=<#FFFFFF> HTTP JSON-RPC Server |
+  |=<#FFD700> JSON-RPC Protocol |
+  |=<#FFA500> User Handler |
+  |=<#90EE90> 下游 (Response) |
+endlegend
+
+@enduml

@@ -381,7 +381,8 @@ bool JsonRpcSerialization::validateRequestJson(const nlohmann::json& json) {
 
     if (json.contains("params")) {
         const auto& params = json["params"];
-        if (!params.is_array() && !params.is_object()) {
+        // params 可以是 array、object 或 null（表示无参数）
+        if (!params.is_array() && !params.is_object() && !params.is_null()) {
             return false;
         }
     }
