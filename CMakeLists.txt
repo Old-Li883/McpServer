@@ -39,12 +39,16 @@ endif()
 # 头文件目录
 include_directories(${CMAKE_SOURCE_DIR}/config)
 include_directories(${CMAKE_SOURCE_DIR}/src/logger)
+include_directories(${CMAKE_SOURCE_DIR}/src/json_rpc)
 
 # 源文件
 set(SOURCES
     src/main.cpp
     config/Config.cpp
     src/logger/Logger.cpp
+    src/json_rpc/jsonrpc_serialization.cpp
+    src/json_rpc/jsonrpc.cpp
+    src/json_rpc/stdio_jsonrpc.cpp
 )
 
 # 可执行文件
@@ -59,3 +63,9 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 # 测试可执行文件
 add_executable(test_logger tests/test_logger.cpp src/logger/Logger.cpp)
 target_link_libraries(test_logger PRIVATE ${SPDLOG_TARGET})
+
+add_executable(test_jsonrpc tests/test_jsonrpc.cpp
+    src/json_rpc/jsonrpc_serialization.cpp
+    src/json_rpc/jsonrpc.cpp
+)
+target_link_libraries(test_jsonrpc PRIVATE nlohmann_json::nlohmann_json)

@@ -1,0 +1,97 @@
+@startuml JSON-RPC 模块使用示例
+!theme plain
+skinparam backgroundColor #FEFEFE
+
+title JSON-RPC 模块 - 使用流程图
+
+start
+
+:初始化阶段;
+
+partition "步骤 1: 创建 JsonRpc 实例" #E6F3FF {
+    :JsonRpc rpc;
+
+    note right
+      创建 JSON-RPC 处理器
+      默认配置:
+      - strictMode = true
+      - allowNotification = true
+      - allowBatch = true
+    end note
+}
+
+partition "步骤 2: 注册业务方法" #FFE6CC {
+    :rpc.registerMethod("add", lambda);
+    :rpc.registerMethod("subtract", lambda);
+    :rpc.registerMethod("multiply", lambda);
+
+    note right
+      方法签名:
+      function<json(string, json params)>
+
+      示例:
+      [](auto&, auto& p) {
+        return p[0].get<int>() + p[1].get<int>();
+      }
+    end note
+}
+
+partition "步骤 3: 创建传输层" #E6FFE6 {
+    :StdioJsonRpc server(rpc);
+
+    :server.setRequestCallback(callback);
+    :server.setResponseCallback(callback);
+    :server.setErrorCallback(callback);
+
+    note right
+      可选配置:
+      - maxBufferSize
+      - maxMessageSize
+      - enableDebugLog
+    end note
+}
+
+partition "步骤 4: 启动服务" #FFE6FF {
+    :server.start();
+
+    note right
+      启动异步读取线程
+      从 stdin 持续读取消息
+    end note
+}
+
+:等待请求;
+
+partition "请求处理循环" #FFFFCC {
+    repeat
+        :从 stdin 读取 JSON 字符串;
+
+        :反序列化为 Request;
+
+        if (通知? 无 ID) then (是)
+            :调用方法处理器;
+            :不发送响应;
+        else (否)
+            :调用方法处理器;
+            :创建 Response;
+            :序列化为 JSON;
+            :写入 stdout;
+        endif
+
+    repeat while (running) is (yes)
+    ->(否);
+
+    :server.stop();
+
+    note right
+      停止异步读取线程
+      清理资源
+    end note
+}
+
+:程序结束;
+
+stop
+
+
+@enduml
