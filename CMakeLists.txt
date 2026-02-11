@@ -103,6 +103,7 @@ endif()
 include_directories(${CMAKE_SOURCE_DIR}/config)
 include_directories(${CMAKE_SOURCE_DIR}/src/logger)
 include_directories(${CMAKE_SOURCE_DIR}/src/json_rpc)
+include_directories(${CMAKE_SOURCE_DIR}/src/mcp)
 
 # 源文件
 set(SOURCES
@@ -113,6 +114,11 @@ set(SOURCES
     src/json_rpc/jsonrpc.cpp
     src/json_rpc/stdio_jsonrpc.cpp
     src/json_rpc/http_jsonrpc_server.cpp
+    src/mcp/ToolManager.cpp
+    src/mcp/ResourceManager.cpp
+    src/mcp/PromptManager.cpp
+    src/mcp/McpServer.cpp
+    src/mcp/McpServerRunner.cpp
 )
 
 # 可执行文件
@@ -172,12 +178,29 @@ target_link_libraries(test_http_jsonrpc_server PRIVATE
 )
 link_gtest(test_http_jsonrpc_server)
 
+# MCP模块测试
+add_executable(test_mcp_server tests/test_mcp_server.cpp
+    src/json_rpc/jsonrpc_serialization.cpp
+    src/json_rpc/jsonrpc.cpp
+    src/mcp/ToolManager.cpp
+    src/mcp/ResourceManager.cpp
+    src/mcp/PromptManager.cpp
+    src/mcp/McpServer.cpp
+    src/logger/Logger.cpp
+)
+target_link_libraries(test_mcp_server PRIVATE
+    nlohmann_json::nlohmann_json
+    ${SPDLOG_TARGET}
+)
+link_gtest(test_mcp_server)
+
 # 启用测试发现
 include(GoogleTest)
 gtest_discover_tests(test_logger)
 gtest_discover_tests(test_jsonrpc)
 gtest_discover_tests(test_stdio_jsonrpc)
 gtest_discover_tests(test_http_jsonrpc_server)
+gtest_discover_tests(test_mcp_server)
 
 # 为 CLion 设置
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

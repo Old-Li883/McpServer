@@ -9,7 +9,7 @@ Config Config::instance_;
 // 验证 JSON 配置的正确性
 static bool validateConfig(const nlohmann::json& j) {
     // 有效的 server mode 值
-    const std::set<std::string> validModes = {"both", "tcp", "stdio"};
+    const std::set<std::string> validModes = {"http", "stdio", "both", "tcp"};
 
     // 有效的 log level 值
     const std::set<std::string> validLogLevels = {"debug", "info", "warn", "error", "trace", "critical"};
