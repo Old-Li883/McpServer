@@ -80,6 +80,24 @@ else()
     message(STATUS "GTest found system installation")
 endif()
 
+# 查找 cpp-httplib（优先使用系统安装的）
+find_package(httplib QUIET)
+
+# 如果系统没有安装，使用 FetchContent 下载
+if(NOT httplib_FOUND)
+    message(STATUS "cpp-httplib not found, using FetchContent...")
+    FetchContent_Declare(
+        httplib
+        GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+        GIT_TAG v0.15.3
+    )
+    # 设置 cpp-httplib 选项
+    set(HTTPLIB_COMPILE ON CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(httplib)
+else()
+    message(STATUS "cpp-httplib found system installation")
+endif()
+
 
 # 头文件目录
 include_directories(${CMAKE_SOURCE_DIR}/config)
@@ -94,6 +112,7 @@ set(SOURCES
     src/json_rpc/jsonrpc_serialization.cpp
     src/json_rpc/jsonrpc.cpp
     src/json_rpc/stdio_jsonrpc.cpp
+    src/json_rpc/http_jsonrpc_server.cpp
 )
 
 # 可执行文件
@@ -103,6 +122,7 @@ add_executable(${PROJECT_NAME} ${SOURCES})
 target_link_libraries(${PROJECT_NAME} PRIVATE
     nlohmann_json::nlohmann_json
     ${SPDLOG_TARGET}
+    httplib::httplib
 )
 
 # 链接 GTest 的辅助函数
@@ -140,11 +160,24 @@ target_link_libraries(test_stdio_jsonrpc PRIVATE
 )
 link_gtest(test_stdio_jsonrpc)
 
+# http_jsonrpc_server 测试
+add_executable(test_http_jsonrpc_server tests/test_http_jsonrpc_server.cpp
+    src/json_rpc/jsonrpc_serialization.cpp
+    src/json_rpc/jsonrpc.cpp
+    src/json_rpc/http_jsonrpc_server.cpp
+)
+target_link_libraries(test_http_jsonrpc_server PRIVATE
+    nlohmann_json::nlohmann_json
+    httplib::httplib
+)
+link_gtest(test_http_jsonrpc_server)
+
 # 启用测试发现
 include(GoogleTest)
 gtest_discover_tests(test_logger)
 gtest_discover_tests(test_jsonrpc)
 gtest_discover_tests(test_stdio_jsonrpc)
+gtest_discover_tests(test_http_jsonrpc_server)
 
 # 为 CLion 设置
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

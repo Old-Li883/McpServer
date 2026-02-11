@@ -1,0 +1,142 @@
+@startuml http_jsonrpc_server_state
+!theme plain
+title HttpJsonRpcServer 生命周期状态图
+
+[*] --> Created : new HttpJsonRpcServer()
+
+state Created {
+    [*] --> Idle : 初始化完成
+    state Idle {
+        :等待配置;
+        :可设置配置参数;
+    }
+}
+
+state Starting {
+    :startAsync() 被调用;
+    :创建 cpp-httplib Server;
+    :设置路由处理器;
+    :启动工作线程;
+}
+
+Idle --> Starting : startAsync()
+Starting --> Running : 服务器监听成功
+
+state Running {
+    state "处理请求循环" as RequestLoop {
+        --> Listening : 等待连接
+
+        state Listening {
+            :accept() 等待;
+        }
+
+        Listening --> Processing : 收到请求
+
+        state Processing <<choice>> {
+            --> JsonRequest : POST / 或 /rpc
+            --> SseConnection : GET /events
+            --> CustomRequest : 其他路径
+        }
+
+        state JsonRequest {
+            :解析 JSON;
+            :调用 JsonRpc;
+            :返回响应;
+        }
+
+        state SseConnection {
+            :生成客户端ID;
+            :创建 SseClient;
+            :保持连接;
+            note right
+                **SSE 状态**
+                - active: true
+                - buffer: stringstream
+                - clientId: uuid
+            end note
+        }
+
+        state CustomRequest {
+            :调用自定义处理器;
+            :返回结果;
+        }
+
+        JsonRequest --> Listening
+        SseConnection --> SseActive
+        CustomRequest --> Listening
+    }
+
+    state SseActive {
+        :持续推送事件;
+        --> Broadcasting : 收到广播事件
+        --> Heartbeat : 定时心跳
+
+        state Broadcasting {
+            :格式化 SSE 事件;
+            :写入客户端缓冲区;
+        }
+
+        state Heartbeat {
+            :检查超时;
+        }
+
+        Broadcasting --> SseActive : 继续监听
+        Heartbeat --> SseActive : 正常
+
+        SseActive --> Running : 客户端断开
+        Heartbeat --> Running : 超时断开
+    }
+}
+
+Running --> Stopping : stop() 被调用
+
+state Stopping {
+    :设置 running_ = false;
+    :停止 cpp-httplib Server;
+    :关闭所有 SSE 连接;
+    :join 服务器线程;
+    :清理资源;
+}
+
+Stopping --> Stopped : 清理完成
+
+state Stopped {
+    :服务器已停止;
+    :线程已结束;
+    :可以重新启动;
+}
+
+Stopped --> [*] : 析构
+
+state Error {
+    :发生错误;
+    :记录 lastError_;
+}
+
+Starting --> Error : 绑定失败
+Running --> Error : 处理异常
+Error --> Stopped : 自动停止
+
+note right of Starting
+    **启动条件**
+    - 端口可用
+    - 配置有效
+    - 依赖已加载
+end note
+
+note left of Running
+    **运行时特性**
+    - 多线程处理
+    - SSE 持久连接
+    - 请求计数
+    - 错误处理
+end note
+
+note bottom of Stopping
+    **优雅关闭**
+    - 等待现有请求完成
+    - 通知所有 SSE 客户端
+    - 清理连接池
+end note
+
+@enduml
