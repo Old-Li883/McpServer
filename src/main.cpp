@@ -221,6 +221,13 @@ void printServerInfo(const McpServerRunner& runner) {
 int main(int argc, char* argv[]) {
     // 加载配置
     Config& config = Config::getInstance();
+    // 尝试从多个位置加载配置文件
+    if (!config.loadFromFile("config.json")) {
+        if (!config.loadFromFile("../config.json")) {
+            // 如果配置文件加载失败，使用默认配置（HTTP 模式）
+            config.setServerMode("http");
+        }
+    }
 
     // 初始化日志系统
     auto& logger = mcpserver::Logger::getInstance();
