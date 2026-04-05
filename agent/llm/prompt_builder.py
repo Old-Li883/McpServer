@@ -49,28 +49,25 @@ class PromptBuilder:
             prompt += self._format_tools()
 
             prompt += "\n\n## Tool Use Guidelines\n\n"
-            prompt += "**IMPORTANT**: When a user asks for something that requires a tool, you MUST use the tool.\n\n"
-            prompt += "You can indicate tool usage in several ways:\n\n"
-            prompt += "**Option 1 - Structured format (preferred):**\n"
-            prompt += "```\n"
-            prompt += "TOOL: tool_name\n"
-            prompt += "ARGUMENTS: {\n"
-            prompt += '  "param1": "value1"\n'
-            prompt += "}\n"
+            prompt += "**Required Tool Call Format:**\n\n"
+            prompt += "When you need to use a tool, you MUST use the following exact format:\n\n"
+            prompt += "For a single tool:\n"
+            prompt += "```json\n"
+            prompt += '{"tool": "tool_name", "arguments": {"param1": "value1", "param2": "value2"}}\n'
             prompt += "```\n\n"
-            prompt += "**Option 2 - Natural language:**\n"
-            prompt += "- \"I'll use the get_current_time tool\"\n"
-            prompt += "- \"Let me call echo with 'Hello World'\"\n"
-            prompt += "- \"Use add to calculate 15 + 27\"\n\n"
-            prompt += "**Option 3 - Function style:**\n"
-            prompt += "- get_current_time()\n"
-            prompt += "- echo(text=\"Hello\")\n\n"
-            prompt += "**Key Rules:**\n"
-            prompt += "1. When user asks for time, date, or current info → use get_current_time\n"
-            prompt += "2. When user wants to repeat/echo something → use echo\n"
-            prompt += "3. When user asks to add/calculate/sum numbers → use add\n"
-            prompt += "4. ALWAYS use tools when the request matches their purpose\n"
-            prompt += "5. Don't say you can't do something if a tool exists for it\n\n"
+            prompt += "For multiple tools:\n"
+            prompt += "```json\n"
+            prompt += '[\n'
+            prompt += '  {"tool": "tool_name1", "arguments": {"param1": "value1"}},\n'
+            prompt += '  {"tool": "tool_name2", "arguments": {"param2": "value2"}}\n'
+            prompt += ']\n'
+            prompt += "```\n\n"
+            prompt += "**Important Rules:**\n"
+            prompt += "1. You MUST use the exact JSON format shown above for ALL tool calls\n"
+            prompt += "2. The JSON MUST be wrapped in ```json ... ``` code blocks\n"
+            prompt += "3. For tools with no parameters, use empty object: {\"tool\": \"tool_name\", \"arguments\": {}}\n"
+            prompt += "4. Do NOT use any other format (function calls, natural language, etc.)\n"
+            prompt += "5. Always explain what you're doing before/after the tool call\n\n"
 
         return prompt
 
