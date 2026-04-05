@@ -1,0 +1,234 @@
+@startuml MCP Server - Sequence Diagram
+title MCP Server 端到端时序图
+
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam participantPadding 10
+skinparam boxPadding 10
+
+' 定义参与者
+actor "LLM Client\n(Claude Desktop)" as Client
+participant "Config\n(Singleton)" as Config
+participant "Logger\n(Singleton)" as Logger
+participant "McpServerRunner" as Runner
+participant "JsonRpc" as JR
+participant "McpServer" as Mcp
+participant "ToolManager" as TM
+participant "ResourceManager" as RM
+participant "File System" as FS
+participant "System APIs" as SysAPI
+
+' 根据部署模式选择传输层
+note over Client, Runner
+    <b>两种部署模式:</b>
+    1. STDIO: 通过 stdin/stdout (LSP格式)
+    2. HTTP: 通过网络 (JSON-RPC)
+end note
+
+' =============================================
+' 启动阶段
+' =============================================
+
+== 启动阶段 ==
+
+Client -> Config: main() 开始\nConfig::getInstance()
+activate Config
+Config --> Client: 配置加载完成
+deactivate Config
+
+Client -> Logger: Logger::getInstance().initialize()
+activate Logger
+Logger --> Client: 日志系统初始化完成
+deactivate Logger
+
+Client -> Runner: new McpServerRunner(config)
+activate Runner
+
+Runner -> JR: new JsonRpc()
+activate JR
+JR --> Runner: JSON-RPC 处理器创建
+deactivate JR
+
+Runner -> Mcp: new McpServer(mcpConfig)
+activate Mcp
+
+Mcp -> TM: new ToolManager()
+activate TM
+TM --> Mcp: 工具管理器创建
+deactivate TM
+
+Mcp -> RM: new ResourceManager()
+activate RM
+RM --> Mcp: 资源管理器创建
+deactivate RM
+
+Mcp -> Logger: new PromptManager()\n(内部使用Logger)
+activate Logger
+Logger --> Mcp: 提示管理器创建
+deactivate Logger
+
+Mcp --> Runner: MCP 服务器创建完成
+deactivate Mcp
+
+Runner -> Mcp: registerMethods(*jsonRpc_)
+activate Mcp
+note right
+    注册7个MCP方法:
+    • initialize
+    • tools/list, tools/call
+    • resources/list, resources/read
+    • prompts/list, prompts/get
+end note
+Mcp --> Runner: 方法注册完成
+deactivate Mcp
+
+Runner -> Runner: 创建传输层\n(HTTP/STDIO/BOTH)
+
+Runner --> Client: 服务器启动完成\n开始监听请求
+deactivate Runner
+
+' =============================================
+' 工具调用流程
+' =============================================
+
+== 工具调用 (tools/call) ==
+
+Client -> Runner: HTTP POST / 或\nstdin (LSP格式)
+note left
+    <b>HTTP请求:</b>
+    POST /\n{"jsonrpc":"2.0",\n "method":"tools/call",\n "params":{...},\n "id":1}
+
+    <b>STDIO请求:</b>
+    Content-Length: 123\n\n{"jsonrpc":"2.0",...}
+end note
+
+activate Runner
+Runner -> JR: handleRequest(jsonString)
+activate JR
+
+JR -> JR: deserializeRequest(jsonStr)
+JR -> JR: handleRequest(Request)
+JR -> JR: processRequest()
+
+JR -> Mcp: syncHandler("tools/call", params)
+activate Mcp
+
+Mcp -> TM: callTool(name, arguments)
+activate TM
+TM -> TM: 查找工具 (加锁)
+TM -> TM: 验证参数
+
+TM -> TM: handler(name, arguments)
+note right
+    <b>用户定义的工具处理函数:</b>
+    例如: get_current_time 工具
+    调用 std::chrono::system_clock
+end note
+
+TM -> SysAPI: 调用系统API\n(e.g., std::chrono)
+activate SysAPI
+SysAPI --> TM: 返回系统时间
+deactivate SysAPI
+
+TM --> Mcp: 返回 ToolResult
+deactivate TM
+
+Mcp --> JR: 返回 JSON 结果
+deactivate Mcp
+
+JR -> JR: serializeResponse(response)
+JR --> Runner: 返回 JSON 响应
+deactivate JR
+
+Runner --> Client: HTTP Response 或\nstdout (LSP格式)
+note left
+    <b>HTTP响应:</b>
+    {"jsonrpc":"2.0",\n "result":{"content":[...]},\n "id":1}
+
+    <b>STDIO响应:</b>
+    Content-Length: 456\n\n{"jsonrpc":"2.0",...}
+end note
+deactivate Runner
+
+' =============================================
+' 资源读取流程
+' =============================================
+
+== 资源读取 (resources/read) ==
+
+Client -> Runner: resources/read 请求
+activate Runner
+Runner -> JR: handleRequest(jsonString)
+activate JR
+JR -> JR: deserializeRequest
+JR -> JR: processRequest()
+
+JR -> Mcp: syncHandler("resources/read", params)
+activate Mcp
+
+Mcp -> RM: readResource(uri)
+activate RM
+RM -> RM: 查找资源 (加锁)
+RM -> RM: handler(uri)
+
+RM -> FS: 读取文件内容
+activate FS
+FS --> RM: 返回文件内容
+deactivate FS
+
+RM --> Mcp: 返回 ResourceContent
+deactivate RM
+
+Mcp --> JR: 返回 JSON 结果
+deactivate Mcp
+JR -> JR: serializeResponse
+JR --> Runner: JSON 响应
+deactivate JR
+Runner --> Client: 返回资源内容
+deactivate Runner
+
+' =============================================
+' 错误处理
+' =============================================
+
+== 错误处理场景 ==
+
+Client -> Runner: tools/call\n(不存在的工具)
+activate Runner
+Runner -> JR: handleRequest
+activate JR
+JR -> Mcp: syncHandler("tools/call", params)
+activate Mcp
+Mcp -> TM: callTool(name, args)
+activate TM
+
+TM -> TM: 查找工具 - 未找到
+
+TM --> Mcp: 返回错误
+deactivate TM
+Mcp --> JR: 返回错误响应
+deactivate Mcp
+JR -> JR: 序列化错误
+JR --> Runner: JSON-RPC Error
+deactivate JR
+Runner --> Client: {"jsonrpc":"2.0",\n"error":{"code":-32601,...},\n"id":1}
+deactivate Runner
+
+' =============================================
+' 图例说明
+' =============================================
+
+legend right
+    <b>图例说明:</b>
+
+    |<back:back: #E8F5E9> 绿色 | 客户端 |
+    |<back:back: #FFF3E0> 橙色 | 服务器组件 |
+    |<back:back: #E0F2F1> 青色 | 业务管理器 |
+    |<back:back: #FFE0B2> 深橙色 | 外部系统 |
+
+    <b>数据流向:</b>
+    → 同步调用
+    --> 返回结果
+endlegend
+
+@enduml

@@ -1,0 +1,209 @@
+@startuml MCP Server - Implementation View
+title MCP Server 实现视图 (Implementation View)
+
+skinparam backgroundColor #FEFEFE
+skinparam packageStyle rectangle
+
+' =============================================
+' 目录结构
+' =============================================
+
+package "mcpserver/" {
+    package "src/" {
+        [main.cpp] as Main
+
+        package "mcp/" {
+            [McpServerRunner.h] as RunnerH
+            [McpServerRunner.cpp] as RunnerCpp
+            [McpServer.h] as ServerH
+            [McpServer.cpp] as ServerCpp
+            [ToolManager.h] as TMH
+            [ToolManager.cpp] as TMCpp
+            [ResourceManager.h] as RMH
+            [ResourceManager.cpp] as RMCpp
+            [PromptManager.h] as PMH
+            [PromptManager.cpp] as PMCpp
+            [types.h] as Types
+        }
+
+        package "json_rpc/" {
+            [jsonrpc.h] as JRH
+            [jsonrpc.cpp] as JRCpp
+            [jsonrpc_serialization.h] as JRS
+            [jsonrpc_serialization.cpp] as JRSCpp
+            [stdio_jsonrpc.h] as SJH
+            [stdio_jsonrpc.cpp] as SJCpp
+            [http_jsonrpc_server.h] as HJSH
+            [http_jsonrpc_server.cpp] as HJSCpp
+        }
+
+        package "logger/" {
+            [Logger.h] as LH
+            [Logger.cpp] as LCpp
+            [LogMacros.h] as LM
+        }
+    }
+
+    package "config/" {
+        [Config.h] as CH
+        [Config.cpp] as CCpp
+    }
+
+    package "tests/" {
+        [test_mcp_server.cpp] as TestMCP
+        [test_jsonrpc.cpp] as TestJR
+        [test_stdio_jsonrpc.cpp] as TestSJ
+        [test_http_jsonrpc_server.cpp] as TestHJS
+    }
+
+    package "build/" {
+        [CMakeLists.txt] as CMake
+    }
+}
+
+' =============================================
+' 编译依赖关系
+' =============================================
+
+Main ..> RunnerH : include
+Main ..> CH : include
+Main ..> LH : include
+
+RunnerCpp ..> RunnerH : include
+RunnerCpp ..> ServerH : include
+RunnerCpp ..> JRH : include
+RunnerCpp ..> SJH : include
+RunnerCpp ..> HJSH : include
+
+ServerCpp ..> ServerH : include
+ServerCpp ..> TMH : include
+ServerCpp ..> RMH : include
+ServerCpp ..> PMH : include
+ServerCpp ..> JRH : include
+
+TMCpp ..> TMH : include
+TMCpp ..> Types : include
+
+RMCpp ..> RMH : include
+RMCpp ..> Types : include
+
+PMCpp ..> PMH : include
+PMCpp ..> Types : include
+
+JRCpp ..> JRH : include
+JRCpp ..> JRS : include
+
+SJCpp ..> SJH : include
+SJCpp ..> JRH : include
+
+HJSCpp ..> HJSH : include
+HJSCpp ..> JRH : include
+
+LCpp ..> LH : include
+
+CCpp ..> CH : include
+
+' =============================================
+' 模块依赖图
+' =============================================
+
+package "模块依赖层次" {
+    rectangle "应用层" as AppLayer {
+        component "main.cpp" as MainComp
+    }
+
+    rectangle "门面层" as FacadeLayer {
+        component "McpServerRunner" as RunnerComp
+    }
+
+    rectangle "核心层" as CoreLayer {
+        component "McpServer" as ServerComp
+        component "JsonRpc" as JRComp
+    }
+
+    rectangle "管理层" as MgrLayer {
+        component "ToolManager" as TMComp
+        component "ResourceManager" as RMComp
+        component "PromptManager" as PMComp
+    }
+
+    rectangle "传输层" as TransLayer {
+        component "StdioJsonRpc" as SJComp
+        component "HttpJsonRpcServer" as HJSComp
+    }
+
+    rectangle "基础设施层" as InfraLayer {
+        component "types.h" as TypesComp
+        component "Config" as ConfigComp
+        component "Logger" as LogComp
+    }
+}
+
+MainComp -down-> FacadeLayer
+FacadeLayer -down-> CoreLayer
+CoreLayer -down-> MgrLayer
+CoreLayer -down-> TransLayer
+CoreLayer -right-> InfraLayer
+MgrLayer -right-> InfraLayer
+
+' =============================================
+' 外部依赖
+' =============================================
+
+package "外部依赖 (External Dependencies)" {
+    artifact "nlohmann/json\nv3.11.3" as NlohmannJson
+    artifact "spdlog\nv1.12.0" as Spdlog
+    artifact "cpp-httplib\nv0.15.3" as Httplib
+    artifact "Google Test\nv1.14.0" as GTest
+}
+
+' 连接外部依赖
+TypesComp ..> NlohmannJson : JSON 序列化
+LogComp ..> Spdlog : 日志框架
+HJSComp ..> Httplib : HTTP 服务器
+TestMCP ..> GTest : 单元测试
+TestJR ..> GTest : 单元测试
+
+' =============================================
+' 头文件说明
+' =============================================
+
+note right of RunnerH
+    <b>McpServerRunner.h</b>
+    • 依赖: McpServer.h, jsonrpc.h
+    • 管理: 传输层生命周期
+    • 提供: 统一启动接口
+end note
+
+note right of ServerH
+    <b>McpServer.h</b>
+    • 依赖: 3个 Manager
+    • 功能: 方法路由注册
+    • 协议: MCP 规范实现
+end note
+
+note right of Types
+    <b>types.h</b>
+    • 定义: 所有 MCP 数据类型
+    • 序列化: nlohmann/json
+    • 大小: ~700 行
+end note
+
+'note right of diagram
+'    <b>依赖原则:</b>
+'    • 上层可以依赖下层
+'    • 同层之间尽量减少依赖
+'    • 使用头文件前向声明减少耦合
+'end note
+
+legend right
+    |<back:back: #E3F2FD> 蓝色 | 项目根目录 |
+    |<back:back: #FFF3E0> 橙色 | 源代码目录 |
+    |<back:back: #E8F5E9> 绿色 | MCP 核心模块 |
+    |<back:back: #FFF9C4> 黄色 | JSON-RPC 模块 |
+    |<back:back: #F3E5F5> 紫色 | 日志模块 |
+    |<back:back: #E0F2F1> 青色 | 配置模块 |
+    |<back:back: #FFEBEE> 红色 | 测试目录 |
+endlegend
+
+@enduml

@@ -1,0 +1,38 @@
+[2026-04-04 23:57:05.029] [info] [56589092] Logger initialized successfully - File: logs/mcpserver.log, Level: debug, MaxSize: 10MB, MaxFiles: 5
+[2026-04-04 23:57:05.029] [info] [56589092] MCP Server starting...
+[2026-04-04 23:57:05.029] [info] [56589092] Log level: debug
+[2026-04-04 23:57:05.030] [info] [56589092] McpServer initialized: mcp-server v1.0.0
+[2026-04-04 23:57:05.030] [info] [56589092] MCP methods registered to JsonRpc
+[2026-04-04 23:57:05.030] [info] [56589092] HTTP server configured for 0.0.0.0:8080
+[2026-04-04 23:57:05.030] [info] [56589092] McpServerRunner initialized in http mode
+[2026-04-04 23:57:05.030] [info] [56589092] Tool registered: echo
+[2026-04-04 23:57:05.030] [info] [56589092] Tool registered: add
+[2026-04-04 23:57:05.030] [info] [56589092] Tool registered: get_current_time
+[2026-04-04 23:57:05.030] [info] [56589092] Registered 3 example tools
+[2026-04-04 23:57:05.030] [info] [56589092] Resource registered: system://info
+[2026-04-04 23:57:05.030] [info] [56589092] Resource registered: help://overview
+[2026-04-04 23:57:05.030] [info] [56589092] Registered 2 example resources
+[2026-04-04 23:57:05.030] [info] [56589092] RegisterPrompt called: name='summarize', args_count=1
+[2026-04-04 23:57:05.030] [info] [56589092] Prompt registered: summarize
+[2026-04-04 23:57:05.030] [info] [56589092] RegisterPrompt called: name='explain', args_count=1
+[2026-04-04 23:57:05.030] [info] [56589092] Prompt registered: explain
+[2026-04-04 23:57:05.030] [info] [56589092] Registered 2 example prompts
+========================================
+       MCP Server Started
+========================================
+Mode: HTTP
+URL:  http://0.0.0.0:8080
+========================================
+Tools:      3 registered
+Resources:  2 registered
+Prompts:    2 registered
+========================================
+Press Ctrl+C to stop the server
+========================================
+[2026-04-04 23:57:05.030] [info] [56589092] Starting MCP server in http mode...
+[2026-04-04 23:57:05.030] [info] [56589092] Starting HTTP server on 0.0.0.0:8080
+[2026-04-05 01:37:12.143] [debug] [56589099] Handling initialize request
+[2026-04-05 01:37:12.161] [debug] [56589099] Handling tools/list request
+[2026-04-05 01:38:03.313] [debug] [56589100] Handling tools/call request
+[2026-04-05 01:38:03.315] [debug] [56589100] Calling tool: add
+[2026-04-05 01:40:30.908] [info] [56589092] Received signal, shutting down...

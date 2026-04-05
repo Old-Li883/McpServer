@@ -1,0 +1,147 @@
+@startuml MCP Server - Logical View
+title MCP Server 逻辑视图 (Logical View)
+
+skinparam componentStyle rectangle
+skinparam backgroundColor #FEFEFE
+
+skinparam package {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+}
+
+skinparam component {
+    BackgroundColor #FFFFFF
+    BorderColor #424242
+}
+
+' =============================================
+' 逻辑视图 - 5层架构
+' =============================================
+
+package "客户端层 (Client Layer)" <<boundary>> {
+    component "Claude Desktop" as ClaudeClient
+    component "Web LLM Client" as WebClient
+    component "Custom MCP Client" as CustomClient
+}
+
+package "传输层 (Transport Layer)" <<boundary>> {
+    component "StdioJsonRpc\n(LSP Format)" as Stdio
+    component "HttpJsonRpcServer\n(HTTP/SSE)" as Http
+
+    note right of Stdio
+        stdin/stdout 通信
+        Content-Length 头
+        父进程管理生命周期
+    end note
+
+    note right of Http
+        HTTP POST 端点
+        端口 8080 (默认)
+        SSE 支持
+        线程池并发
+    end note
+}
+
+package "协议层 (Protocol Layer)" <<boundary>> {
+    component "JsonRpc\n(JSON-RPC 2.0)" as JsonRpc
+    component "McpServer\n(MCP Method Router)" as McpServer
+
+    note bottom of JsonRpc
+        请求/响应处理
+        方法注册表
+        批量请求支持
+        错误处理
+    end note
+
+    note bottom of McpServer
+        7个MCP方法:
+        - initialize
+        - tools/list, tools/call
+        - resources/list, resources/read
+        - prompts/list, prompts/get
+    end note
+}
+
+package "业务层 (Business Layer)" <<boundary>> {
+    component "ToolManager" as ToolMgr
+    component "ResourceManager" as ResourceMgr
+    component "PromptManager" as PromptMgr
+
+    note right of ToolMgr
+        工具注册表
+        工具执行调度
+        参数验证
+        线程安全
+    end note
+
+    note right of ResourceMgr
+        资源URI管理
+        内容读取
+        MIME类型处理
+    end note
+
+    note right of PromptMgr
+        提示模板管理
+        参数替换
+        消息生成
+    end note
+}
+
+package "数据层 (Data Layer)" <<boundary>> {
+    component "types.h\n(Serialization)" as Types
+    component "Config\n(Singleton)" as Config
+    component "Logger\n(Singleton)" as Logger
+
+    note right of Types
+        Tool, Resource, Prompt
+        ContentItem, ToolResult
+        PromptResult, ResourceContent
+        nlohmann/json
+    end note
+}
+
+' =============================================
+' 连接关系
+' =============================================
+
+ClaudeClient --> Stdio : stdin/stdout\n(LSP Format)
+WebClient --> Http : HTTP POST\n(JSON-RPC)
+CustomClient --> Stdio : 或
+CustomClient --> Http : 或
+
+Stdio --> JsonRpc : Parse LSP Message\nExtract JSON
+Http --> JsonRpc : Parse JSON Body
+
+JsonRpc --> McpServer : Method Dispatch\nLookup & Invoke
+
+McpServer --> ToolMgr : tools/list\ntools/call
+McpServer --> ResourceMgr : resources/list\nresources/read
+McpServer --> PromptMgr : prompts/list\nprompts/get
+
+McpServer --> Types : Serialize/Deserialize
+JsonRpc --> Types : Request/Response\nObjects
+
+ToolMgr --> Types : ToolResult
+ResourceMgr --> Types : ResourceContent
+PromptMgr --> Types : PromptResult
+
+JsonRpc --> Config : Get Configuration
+McpServer --> Logger : Log Events
+ToolMgr --> Logger : Log Execution
+ResourceMgr --> Logger : Log Access
+PromptMgr --> Logger : Log Retrieval
+
+' =============================================
+' 数据流向标注
+' =============================================
+
+
+legend right
+    |<back:back: #E8F5E9> 绿色 | 客户端应用 |
+    |<back:back: #FFF3E0> 橙色 | 传输层组件 |
+    |<back:back: #F3E5F5> 紫色 | 协议处理层 |
+    |<back:back: #E0F2F1> 青色 | 业务管理层 |
+    |<back:back: #FFF8E1> 黄色 | 数据与基础设施 |
+endlegend
+
+@enduml

@@ -1,0 +1,155 @@
+@startuml MCP Server - Deployment View
+title MCP Server 部署视图 (Deployment View)
+
+skinparam backgroundColor #FEFEFE
+
+skinparam node {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+}
+
+' =============================================
+' 场景1: Claude Desktop 集成
+' =============================================
+
+node "User Machine" as UserNode {
+    component "Claude Desktop\n(GUI Application)" as ClaudeApp
+    component "mcpserver.exe\n(子进程)" as McpExe1
+    component "config.json" as Config1
+    component "logs/" as Logs1
+}
+
+ClaudeApp --> McpExe1 : stdin (LSP Request)
+McpExe1 --> ClaudeApp : stdout (LSP Response)
+McpExe1 --> Config1 : read
+McpExe1 --> Logs1 : write
+
+note right of UserNode
+    <b>STDIO 部署模式</b>
+    • Claude Desktop 启动 mcpserver
+    • 通过 stdin/stdout 通信
+    • LSP 格式 (Content-Length 头)
+    • 父进程管理子进程生命周期
+end note
+
+' =============================================
+' 场景2: Web 客户端 (HTTP)
+' =============================================
+
+cloud "Network" as Internet {
+    component "HTTP :8080" as HTTPPort
+}
+
+node "Server Machine" as ServerNode {
+    component "mcpserver\n(HTTP Mode)" as McpExe2
+    database "config.json" as Config2
+    folder "logs/" as Logs2
+}
+
+node "Web Client Machine" as WebClientNode {
+    component "Browser / Web App" as WebApp
+}
+
+WebApp --> Internet : HTTP POST\n(JSON-RPC)
+Internet --> McpExe2
+McpExe2 --> Internet : JSON Response
+Internet --> WebApp
+
+McpExe2 --> Config2 : read
+McpExe2 --> Logs2 : write
+
+note right of ServerNode
+    <b>HTTP 部署模式</b>
+    • 监听 0.0.0.0:8080
+    • 线程池处理并发请求
+    • 可配置端点和认证
+    • 独立进程运行
+end note
+
+' =============================================
+' 场景3: 混合部署 (BOTH Mode)
+' =============================================
+
+node "Hybrid Server" as HybridNode {
+    component "mcpserver\n(BOTH Mode)" as McpExe3
+    component "HTTP Thread\n(Background)" as HTTPThread
+    component "STDIO Thread\n(Main)" as STDIOThread
+    component "Shared JSON-RPC" as SharedJR
+}
+
+component "Claude Desktop" as ClaudeHybrid
+component "Web Clients" as WebHybrid
+
+ClaudeHybrid --> STDIOThread : stdin/stdout
+WebHybrid --> HTTPThread : HTTP :8080
+
+STDIOThread --> SharedJR : LSP → JSON
+HTTPThread --> SharedJR : HTTP → JSON
+SharedJR --> STDIOThread : JSON → LSP
+SharedJR --> HTTPThread : JSON → HTTP
+
+note right of HybridNode
+    <b>BOTH 部署模式</b>
+    • HTTP: 后台线程
+    • STDIO: 主线程
+    • 共享 JSON-RPC 处理器
+    • 同时服务两种客户端
+end note
+
+' =============================================
+' 资源访问 (下游系统)
+' =============================================
+
+node "External Resources" as ResNode {
+    database "File System" as FS
+    component "System APIs" as SysAPI
+    component "User Functions\n(Custom Handlers)" as UserFunc
+}
+
+McpExe1 --> FS : Resource Read
+McpExe2 --> FS : Resource Read
+McpExe3 --> FS : Resource Read
+
+McpExe1 --> SysAPI : Tool Execute
+McpExe2 --> SysAPI : Tool Execute
+McpExe3 --> SysAPI : Tool Execute
+
+McpExe1 --> UserFunc : Custom Logic
+McpExe2 --> UserFunc : Custom Logic
+McpExe3 --> UserFunc : Custom Logic
+
+' =============================================
+' 网络配置
+' =============================================
+
+note bottom of Internet
+    <b>网络配置:</b>
+    • 协议: HTTP/1.1
+    • 端口: 8080 (默认可配置)
+    • 路径: POST /
+    • 选项: SSE 支持
+end note
+
+' =============================================
+' 部署架构说明
+' =============================================
+
+'note top of diagram
+'    <b>三种部署模式对比:</b>
+'
+'    <b>STDIO:</b> 适合 Claude Desktop 等桌面应用
+'    <b>HTTP:</b> 适合 Web 服务和多客户端场景
+'    <b>BOTH:</b> 同时支持两种客户端
+'end note
+
+legend right
+    |<back:back: #E8F5E9> 绿色 | 客户端机器 |
+    |<back:back: #FFF3E0> 橙色 | HTTP 服务器 |
+    |<back:back: #C8E6C9> 青色 | Web 客户端 |
+    |<back:back: #F3E5F5> 紫色 | 混合模式服务器 |
+    |<back:back: #FFE0B2> 深橙色 | 外部资源 |
+    |<back:back: #E0F2F1> 青色 | 基础设施 |
+    |<back:back: #BBDEFB> 浅蓝色 | 网络层 |
+endlegend
+
+@enduml
