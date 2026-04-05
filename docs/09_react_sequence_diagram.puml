@@ -1,0 +1,135 @@
+@startuml MCP Agent ReAct时序图
+title MCP Agent ReAct模式时序图 - 完整交互流程
+
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+skinparam noteFontSize 10
+skinparam noteBackgroundColor #FEFECE
+
+actor User
+participant "CLI" as CLI
+participant "AgentEngine" as Agent #LightBlue
+participant "Conversation" as Conv #LightGreen
+participant "ToolOrchestrator" as Tools #LightYellow
+participant "OllamaClient" as LLM #Pink
+participant "McpClient" as MCP #LightCoral
+
+== 用户输入 ==
+
+User -> CLI: 输入消息
+CLI -> Agent: process_message(user_message)
+activate Agent
+
+note right of Agent
+  **agent_engine.py:66-89**
+  process_message() 方法
+end note
+
+Agent -> Conv: add_user_message(message)
+activate Conv
+Conv --> Agent: 消息已添加
+deactivate Conv
+
+Agent -> Agent: _process_with_tools(max_iterations=5)
+
+== ReAct循环开始 ==
+
+Agent -> Conv: get_messages_for_llm()
+activate Conv
+note right of Conv
+  返回对话历史:
+  - 系统提示
+  - 用户消息
+  - 之前的助手响应
+  - 之前的工具结果
+end note
+Conv --> Agent: messages[]
+deactivate Conv
+
+== Think (思考) ==
+
+Agent -> LLM: chat(messages, temp=0.7)
+activate LLM
+note right of LLM
+  **ollama_client.py**
+  调用 Ollama API
+  模型: qwen2:0.5b
+  endpoint: /api/chat
+end note
+LLM --> Agent: llm_response
+deactivate LLM
+
+Agent -> Tools: parse_tool_calls(response_text)
+activate Tools
+note right of Tools
+  **response_parser.py**
+  检测工具调用语法
+end note
+Tools --> Agent: ParsedResponse
+deactivate Tools
+
+== 工具推断 (可选) ==
+
+Agent -> Agent: _infer_tool_calls(user_message)
+note right of Agent
+  **agent_engine.py:208-276**
+  正则表达式匹配 (仅在需要时)
+end note
+
+== Act (行动) ==
+
+Agent -> Conv: add_assistant_message(response, tool_calls)
+activate Conv
+Conv --> Agent: 已添加
+deactivate Conv
+
+alt 有工具调用
+
+  loop 每个工具调用
+    Agent -> Tools: execute_tool(name, arguments)
+    activate Tools
+
+    Tools -> MCP: call_tool(name, arguments)
+    activate MCP
+    note right of MCP
+      **mcp/client.py**
+      HTTP POST to MCP Server
+      endpoint: /tools/call
+    end note
+    MCP --> Tools: ToolResult
+    deactivate MCP
+
+    Tools --> Agent: result
+    deactivate Tools
+
+    Agent -> Tools: format_tool_result(name, result)
+    activate Tools
+    note right of Tools
+      格式: [Tool: name] result
+    end note
+    Tools --> Agent: formatted_result
+    deactivate Tools
+
+    Agent -> Conv: add_tool_message(name, result)
+    activate Conv
+    Conv --> Agent: 已添加
+    deactivate Conv
+  end
+
+else 无工具调用
+
+  note right of Agent
+    **agent_engine.py:139-155**
+    无工具调用，准备返回响应
+  end note
+
+  Agent -> Agent: 设置 final_response
+
+  Agent --> CLI: final_response
+  deactivate Agent
+  CLI -> User: 显示最终响应
+
+end alt
+
+@enduml
