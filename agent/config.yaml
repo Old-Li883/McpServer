@@ -14,6 +14,14 @@ llm:
   temperature: 0.7
   max_tokens: 2048
 
+rag:
+  enabled: true
+  always_enabled: true  # Set to true to always use RAG for all queries (ignores keyword detection)
+  embedder_model: "nomic-embed-text"
+  vector_db_path: "./data/chroma"        # 修改这里
+  collection_name: "knowledge_base"      # 修改这里
+  cache_path: "./data/embeddings_cache"
+
 conversation:
   max_history: 100
   system_prompt: |

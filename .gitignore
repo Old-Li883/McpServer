@@ -24,3 +24,6 @@ McpServer
 
 # OS
 .DS_Store
+
+/data/*
+/logs/*

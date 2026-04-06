@@ -108,3 +108,135 @@
 [2026-04-05 01:38:03.313] [debug] [56589100] [:] Handling tools/call request
 [2026-04-05 01:38:03.315] [debug] [56589100] [:] Calling tool: add
 [2026-04-05 01:40:30.908] [info] [56589092] [:] Received signal, shutting down...
+[2026-04-06 01:08:29.361] [info] [56946632] [:] Logger initialized successfully - File: logs/mcpserver.log, Level: debug, MaxSize: 10MB, MaxFiles: 5
+[2026-04-06 01:08:29.362] [info] [56946632] [:] MCP Server starting...
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Log level: debug
+[2026-04-06 01:08:29.362] [info] [56946632] [:] McpServer initialized: mcp-server v1.0.0
+[2026-04-06 01:08:29.362] [info] [56946632] [:] MCP methods registered to JsonRpc
+[2026-04-06 01:08:29.362] [info] [56946632] [:] HTTP server configured for 0.0.0.0:8080
+[2026-04-06 01:08:29.362] [info] [56946632] [:] McpServerRunner initialized in http mode
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Tool registered: echo
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Tool registered: add
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Tool registered: get_current_time
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Registered 3 example tools
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Resource registered: system://info
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Resource registered: help://overview
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Registered 2 example resources
+[2026-04-06 01:08:29.362] [info] [56946632] [:] RegisterPrompt called: name='summarize', args_count=1
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Prompt registered: summarize
+[2026-04-06 01:08:29.362] [info] [56946632] [:] RegisterPrompt called: name='explain', args_count=1
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Prompt registered: explain
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Registered 2 example prompts
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Starting MCP server in http mode...
+[2026-04-06 01:08:29.362] [info] [56946632] [:] Starting HTTP server on 0.0.0.0:8080
+[2026-04-06 01:09:08.026] [info] [56946632] [:] Received signal, shutting down...
+[2026-04-06 17:52:33.148] [info] [57094557] [:] Logger initialized successfully - File: logs/mcpserver.log, Level: debug, MaxSize: 10MB, MaxFiles: 5
+[2026-04-06 17:52:33.148] [info] [57094557] [:] MCP Server starting...
+[2026-04-06 17:52:33.148] [info] [57094557] [:] Log level: debug
+[2026-04-06 17:52:33.148] [info] [57094557] [:] McpServer initialized: mcp-server v1.0.0
+[2026-04-06 17:52:33.148] [info] [57094557] [:] MCP methods registered to JsonRpc
+[2026-04-06 17:52:33.149] [info] [57094557] [:] HTTP server configured for 0.0.0.0:8080
+[2026-04-06 17:52:33.149] [info] [57094557] [:] McpServerRunner initialized in http mode
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Tool registered: echo
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Tool registered: add
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Tool registered: get_current_time
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Registered 3 example tools
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Resource registered: system://info
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Resource registered: help://overview
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Registered 2 example resources
+[2026-04-06 17:52:33.149] [info] [57094557] [:] RegisterPrompt called: name='summarize', args_count=1
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Prompt registered: summarize
+[2026-04-06 17:52:33.149] [info] [57094557] [:] RegisterPrompt called: name='explain', args_count=1
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Prompt registered: explain
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Registered 2 example prompts
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Starting MCP server in http mode...
+[2026-04-06 17:52:33.149] [info] [57094557] [:] Starting HTTP server on 0.0.0.0:8080
+[2026-04-06 17:53:01.556] [debug] [57094565] [:] Handling initialize request
+[2026-04-06 17:53:01.575] [debug] [57094565] [:] Handling tools/list request
+[2026-04-06 17:55:46.922] [info] [57094557] [:] Received signal, shutting down...
+[2026-04-06 17:56:46.437] [info] [57099899] [:] Logger initialized successfully - File: logs/mcpserver.log, Level: debug, MaxSize: 10MB, MaxFiles: 5
+[2026-04-06 17:56:46.437] [info] [57099899] [:] MCP Server starting...
+[2026-04-06 17:56:46.437] [info] [57099899] [:] Log level: debug
+[2026-04-06 17:56:46.437] [info] [57099899] [:] McpServer initialized: mcp-server v1.0.0
+[2026-04-06 17:56:46.438] [info] [57099899] [:] MCP methods registered to JsonRpc
+[2026-04-06 17:56:46.438] [info] [57099899] [:] HTTP server configured for 0.0.0.0:8080
+[2026-04-06 17:56:46.438] [info] [57099899] [:] McpServerRunner initialized in http mode
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Tool registered: echo
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Tool registered: add
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Tool registered: get_current_time
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Registered 3 example tools
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Resource registered: system://info
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Resource registered: help://overview
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Registered 2 example resources
+[2026-04-06 17:56:46.438] [info] [57099899] [:] RegisterPrompt called: name='summarize', args_count=1
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Prompt registered: summarize
+[2026-04-06 17:56:46.438] [info] [57099899] [:] RegisterPrompt called: name='explain', args_count=1
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Prompt registered: explain
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Registered 2 example prompts
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Starting MCP server in http mode...
+[2026-04-06 17:56:46.438] [info] [57099899] [:] Starting HTTP server on 0.0.0.0:8080
+[2026-04-06 17:56:56.353] [debug] [57099905] [:] Handling initialize request
+[2026-04-06 17:56:56.370] [debug] [57099905] [:] Handling tools/list request
+[2026-04-06 17:58:05.161] [info] [57099899] [:] Received signal, shutting down...
+[2026-04-06 17:59:04.298] [info] [57102937] [:] Logger initialized successfully - File: logs/mcpserver.log, Level: debug, MaxSize: 10MB, MaxFiles: 5
+[2026-04-06 17:59:04.298] [info] [57102937] [:] MCP Server starting...
+[2026-04-06 17:59:04.298] [info] [57102937] [:] Log level: debug
+[2026-04-06 17:59:04.299] [info] [57102937] [:] McpServer initialized: mcp-server v1.0.0
+[2026-04-06 17:59:04.299] [info] [57102937] [:] MCP methods registered to JsonRpc
+[2026-04-06 17:59:04.299] [info] [57102937] [:] HTTP server configured for 0.0.0.0:8080
+[2026-04-06 17:59:04.299] [info] [57102937] [:] McpServerRunner initialized in http mode
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Tool registered: echo
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Tool registered: add
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Tool registered: get_current_time
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Registered 3 example tools
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Resource registered: system://info
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Resource registered: help://overview
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Registered 2 example resources
+[2026-04-06 17:59:04.299] [info] [57102937] [:] RegisterPrompt called: name='summarize', args_count=1
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Prompt registered: summarize
+[2026-04-06 17:59:04.299] [info] [57102937] [:] RegisterPrompt called: name='explain', args_count=1
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Prompt registered: explain
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Registered 2 example prompts
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Starting MCP server in http mode...
+[2026-04-06 17:59:04.299] [info] [57102937] [:] Starting HTTP server on 0.0.0.0:8080
+[2026-04-06 17:59:24.316] [debug] [57102940] [:] Handling initialize request
+[2026-04-06 17:59:24.334] [debug] [57102940] [:] Handling tools/list request
+[2026-04-06 18:02:08.874] [debug] [57102941] [:] Handling initialize request
+[2026-04-06 18:02:08.892] [debug] [57102941] [:] Handling tools/list request
+[2026-04-06 18:03:16.424] [debug] [57102942] [:] Handling initialize request
+[2026-04-06 18:03:16.431] [debug] [57102942] [:] Handling tools/list request
+[2026-04-06 18:03:47.522] [debug] [57102939] [:] Handling initialize request
+[2026-04-06 18:03:47.529] [debug] [57102939] [:] Handling tools/list request
+[2026-04-06 18:04:38.562] [debug] [57102940] [:] Handling initialize request
+[2026-04-06 18:04:38.579] [debug] [57102940] [:] Handling tools/list request
+[2026-04-06 18:05:24.509] [debug] [57102941] [:] Handling initialize request
+[2026-04-06 18:05:24.517] [debug] [57102941] [:] Handling tools/list request
+[2026-04-06 18:09:44.348] [debug] [57102942] [:] Handling initialize request
+[2026-04-06 18:09:44.358] [debug] [57102942] [:] Handling tools/list request
+[2026-04-06 18:11:32.718] [debug] [57102939] [:] Handling initialize request
+[2026-04-06 18:11:32.726] [debug] [57102939] [:] Handling tools/list request
+[2026-04-06 18:12:27.836] [debug] [57102940] [:] Handling initialize request
+[2026-04-06 18:12:27.853] [debug] [57102940] [:] Handling tools/list request
+[2026-04-06 18:13:19.775] [debug] [57102942] [:] Handling initialize request
+[2026-04-06 18:13:19.792] [debug] [57102942] [:] Handling tools/list request
+[2026-04-06 18:15:01.842] [debug] [57102939] [:] Handling initialize request
+[2026-04-06 18:15:01.851] [debug] [57102939] [:] Handling tools/list request
+[2026-04-06 18:15:10.272] [debug] [57102940] [:] Handling initialize request
+[2026-04-06 18:15:10.281] [debug] [57102940] [:] Handling tools/list request
+[2026-04-06 18:15:19.774] [debug] [57102941] [:] Handling initialize request
+[2026-04-06 18:15:19.782] [debug] [57102941] [:] Handling tools/list request
+[2026-04-06 18:15:35.488] [debug] [57102942] [:] Handling initialize request
+[2026-04-06 18:15:35.506] [debug] [57102942] [:] Handling tools/list request
+[2026-04-06 18:27:06.814] [debug] [57102939] [:] Handling initialize request
+[2026-04-06 18:27:06.832] [debug] [57102939] [:] Handling tools/list request
+[2026-04-06 18:27:51.658] [debug] [57102940] [:] Handling initialize request
+[2026-04-06 18:27:51.680] [debug] [57102940] [:] Handling tools/list request
+[2026-04-06 18:28:59.393] [debug] [57102941] [:] Handling initialize request
+[2026-04-06 18:28:59.414] [debug] [57102941] [:] Handling tools/list request
+[2026-04-06 18:29:40.891] [debug] [57102942] [:] Handling initialize request
+[2026-04-06 18:29:56.246] [debug] [57102939] [:] Handling tools/list request
+[2026-04-06 18:42:39.771] [debug] [57102940] [:] Handling initialize request
+[2026-04-06 18:42:43.434] [debug] [57102940] [:] Handling tools/list request
+[2026-04-06 18:49:26.053] [debug] [57102941] [:] Handling initialize request
+[2026-04-06 18:49:26.074] [debug] [57102941] [:] Handling tools/list request
+[2026-04-06 18:52:55.834] [info] [57102937] [:] Received signal, shutting down...

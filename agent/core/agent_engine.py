@@ -1,7 +1,7 @@
 """Agent engine - Core orchestration logic for the MCP Agent.
 
 This module provides the main AgentEngine class that coordinates
-conversation, tools, and LLM interactions.
+conversation, tools, RAG, and LLM interactions.
 """
 
 import asyncio
@@ -15,6 +15,13 @@ from agent.llm.prompt_builder import PromptBuilder
 from agent.llm.response_parser import ParsedResponse, ToolCall
 from agent.mcp.client import McpClient
 from agent.mcp.types import ToolResult
+
+# RAG imports (optional)
+try:
+    from agent.rag import RAGEngine, RAGConfig
+    RAG_AVAILABLE = True
+except ImportError:
+    RAG_AVAILABLE = False
 
 
 class AgentEngine:
@@ -50,6 +57,12 @@ class AgentEngine:
 
         self._tools_loaded = False
 
+        # RAG integration (optional)
+        self._rag_engine: Optional[RAGEngine] = None
+        self._rag_enabled = False
+        self._rag_always_enabled: bool = False  # Always use RAG for all queries
+        self._rag_context_cache: dict[str, str] = {}  # Query -> context cache
+
     async def initialize(self) -> None:
         """Initialize the agent engine.
 
@@ -63,16 +76,22 @@ class AgentEngine:
         self.prompt_builder.set_tools(tools)
         self._tools_loaded = True
 
+        # Initialize RAG if enabled
+        if RAG_AVAILABLE and hasattr(self.config, 'rag') and self.config.rag.enabled:
+            await self._initialize_rag()
+
     async def process_message(
         self,
         user_message: str,
         max_tool_iterations: int = 5,
+        use_rag: Optional[bool] = None,
     ) -> str:
         """Process a user message and generate a response.
 
         Args:
             user_message: The user's message
             max_tool_iterations: Maximum number of tool call iterations
+            use_rag: Whether to use RAG (None = auto-detect)
 
         Returns:
             The agent's response
@@ -80,8 +99,20 @@ class AgentEngine:
         Raises:
             Exception: If processing fails
         """
+        # RAG enhancement (if enabled and applicable)
+        rag_context = ""
+        if self._rag_enabled and (use_rag is None or use_rag):
+            should_use_rag = use_rag if use_rag is not None else self._should_use_rag(user_message)
+            if should_use_rag:
+                rag_context = await self._rag_enhance_query(user_message)
+
+        # Add enhanced user message to conversation
+        enhanced_message = user_message
+        if rag_context:
+            enhanced_message = f"{rag_context}\n\nUser question: {user_message}"
+
         # Add user message to conversation
-        self.conversation.add_user_message(user_message)
+        self.conversation.add_user_message(enhanced_message)
 
         # Process with potential tool calls
         response = await self._process_with_tools(max_tool_iterations, user_message)
@@ -304,6 +335,7 @@ class AgentEngine:
         capabilities = {
             "tools": self.get_available_tools(),
             "llm_model": self.config.llm.model,
+            "rag_enabled": self._rag_enabled,
         }
 
         # Get MCP server capabilities
@@ -317,7 +349,164 @@ class AgentEngine:
         except Exception:
             capabilities["mcp_server"] = {"error": "Not connected"}
 
+        # Get RAG capabilities
+        if self._rag_enabled and self._rag_engine:
+            capabilities["rag"] = self._rag_engine.get_stats()
+
         return capabilities
+
+    # ========== RAG Integration Methods ==========
+
+    async def _initialize_rag(self) -> None:
+        """Initialize the RAG engine.
+
+        Raises:
+            Exception: If RAG initialization fails
+        """
+        if not RAG_AVAILABLE:
+            raise Exception("RAG module not available")
+
+        # Get RAG config (filter out 'enabled' field as RAGConfig doesn't have it)
+        rag_config_dict = self.config.rag.model_dump() if hasattr(self.config.rag, 'model_dump') else {}
+        rag_config_dict.pop('enabled', None)  # Remove 'enabled' field
+        rag_config = RAGConfig(**rag_config_dict)
+
+        # Store the always_enabled setting
+        self._rag_always_enabled = rag_config.always_enabled
+
+        # Create and initialize RAG engine
+        self._rag_engine = RAGEngine(config=rag_config)
+        await self._rag_engine.initialize()
+        self._rag_enabled = True
+
+    def _should_use_rag(self, message: str) -> bool:
+        """Determine if RAG should be used for this message.
+
+        Args:
+            message: The user message
+
+        Returns:
+            True if RAG should be used
+        """
+        if not self._rag_enabled:
+            return False
+
+        # If always_enabled is True, always use RAG
+        if self._rag_always_enabled:
+            return True
+
+        # Simple heuristic: use RAG for questions
+        # Questions often end with question marks or contain question words
+        message_lower = message.lower()
+
+        # Chinese question words
+        chinese_question_words = ['什么', '如何', '怎么', '为什么', '哪个', '哪些', '是否', '有没有']
+        # English question words
+        english_question_words = ['what', 'how', 'why', 'where', 'when', 'who', 'which', 'is', 'are', 'do', 'does', 'can', 'could', 'should', 'would']
+
+        # Check for question marks
+        if '?' in message or '？' in message:
+            return True
+
+        # Check for question words
+        has_question_word = any(word in message_lower for word in english_question_words + chinese_question_words)
+        if has_question_word:
+            return True
+
+        # Check for knowledge-related keywords
+        knowledge_keywords = ['explain', 'tell me about', 'describe', 'documentation', '说明', '解释', '介绍']
+        has_keyword = any(keyword in message_lower for keyword in knowledge_keywords)
+        if has_keyword:
+            return True
+
+        return False
+
+    async def _rag_enhance_query(self, query: str) -> str:
+        """Enhance query with RAG context.
+
+        Args:
+            query: The user query
+
+        Returns:
+            Enhanced query with RAG context
+        """
+        if not self._rag_engine:
+            return ""
+
+        try:
+            # Check cache first
+            if query in self._rag_context_cache:
+                return self._rag_context_cache[query]
+
+            # Query RAG engine
+            result = await self._rag_engine.query(query, top_k=3)
+
+            if result.has_sources:
+                # Use the RAG engine's answer which already contains formatted context
+                # This includes document content, scores, and source references
+                context = result.answer
+
+                # Cache the context
+                self._rag_context_cache[query] = context
+
+                return context
+
+        except Exception as e:
+            # Log error but don't fail
+            print(f"RAG query failed: {e}")
+
+        return ""
+
+    async def rag_add_documents(self, source: str, **kwargs) -> int:
+        """Add documents to the RAG knowledge base.
+
+        Args:
+            source: Source path (file, directory, URL)
+            **kwargs: Additional parameters
+
+        Returns:
+            Number of chunks added
+        """
+        if not self._rag_engine:
+            raise Exception("RAG is not enabled")
+
+        return await self._rag_engine.add_documents(source, **kwargs)
+
+    async def rag_query(self, query: str, top_k: int = 5):
+        """Direct RAG query (bypasses normal agent processing).
+
+        Args:
+            query: The query
+            top_k: Number of results
+
+        Returns:
+            QueryResult
+        """
+        if not self._rag_engine:
+            raise Exception("RAG is not enabled")
+
+        return await self._rag_engine.query(query, top_k=top_k)
+
+    async def rag_clear(self) -> None:
+        """Clear all documents from the RAG knowledge base."""
+        if not self._rag_engine:
+            raise Exception("RAG is not enabled")
+
+        await self._rag_engine.delete_collection()
+        self._rag_context_cache.clear()
+
+    def get_rag_stats(self) -> dict[str, Any]:
+        """Get RAG statistics.
+
+        Returns:
+            RAG statistics dictionary
+        """
+        if not self._rag_engine:
+            return {"enabled": False}
+
+        return self._rag_engine.get_stats()
+
+    # ========== End RAG Integration Methods ==========
 
 
 async def create_agent(config: Optional[Config] = None) -> AgentEngine:

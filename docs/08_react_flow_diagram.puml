@@ -1,5 +1,5 @@
-@startuml MCP Agent ReAct流程图
-title MCP Agent ReAct (Reasoning + Acting) 模式详细流程
+@startuml MCP Agent ReAct流程图 (RAG增强版)
+title MCP Agent ReAct (Reasoning + Acting + RAG) 模式详细流程
 
 skinparam backgroundColor #FEFEFE
 skinparam handwritten false
@@ -15,7 +15,35 @@ note right
   process_message() 方法
 end note
 
-:添加用户消息到对话历史;
+partition "RAG 增强 (可选)" #Lavender {
+  :检查RAG是否启用;
+  note right
+    **_should_use_rag()**
+    检测问题关键词
+  end note
+
+  if (RAG启用且需要检索?) then (是)
+    :调用RAG引擎检索相关知识;
+    note right
+      **_rag_enhance_query()**
+      1. 查询向量数据库
+      2. 获取最相关文档
+      3. 构建上下文
+    end note
+
+    :构建增强的用户消息;
+    note right
+      原始消息 + RAG上下文
+    end note
+  else (否)
+    :使用原始用户消息;
+  endif
+}
+
+:添加消息到对话历史;
+note right
+  可能包含RAG上下文
+end note
 
 :初始化 ReAct 循环;
 note right
@@ -38,8 +66,8 @@ while (iteration < max_iterations?) is (是)
     note right
       **agent_engine.py:113**
       conversation.get_messages_for_llm()
-      包含: 系统提示、用户消息、
-      助手响应、工具结果
+      包含: 系统提示、RAG上下文(如有)、
+      用户消息、助手响应、工具结果
     end note
   }
 

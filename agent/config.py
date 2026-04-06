@@ -50,6 +50,24 @@ class CliConfig(BaseModel):
     show_thinking: bool = True
 
 
+class RagConfig(BaseModel):
+    """RAG (Retrieval-Augmented Generation) configuration."""
+
+    enabled: bool = False
+    always_enabled: bool = False  # Always use RAG for all queries (ignores keyword detection)
+    embedder_model: str = "nomic-embed-text"
+    embedder_base_url: str = "http://localhost:11434"
+    vector_db_path: str = "./data/chroma"
+    collection_name: str = "knowledge_base"
+    chunk_size: int = 512
+    chunk_overlap: int = 50
+    top_k: int = 5
+    score_threshold: float = 0.5
+    enable_cache: bool = True
+    cache_path: str = "./data/embeddings_cache"
+    enable_chinese_optimization: bool = True
+
+
 class Config(BaseModel):
     """Main configuration."""
 
@@ -58,6 +76,7 @@ class Config(BaseModel):
     llm: LlmConfig = Field(default_factory=LlmConfig)
     conversation: ConversationConfig = Field(default_factory=ConversationConfig)
     cli: CliConfig = Field(default_factory=CliConfig)
+    rag: RagConfig = Field(default_factory=RagConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Config":
