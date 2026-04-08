@@ -68,6 +68,30 @@ class RagConfig(BaseModel):
     enable_chinese_optimization: bool = True
 
 
+class MemoryConfig(BaseModel):
+    """Memory system configuration."""
+
+    # Short-term memory configuration
+    short_term_max_messages: int = 100
+    short_term_summary_threshold: int = 80
+    short_term_importance_threshold: float = 0.6
+
+    # Long-term memory configuration
+    long_term_enabled: bool = True
+    long_term_vector_db_path: str = "./data/memory_chroma"
+    long_term_collection_name: str = "long_term_memory"
+    long_term_embedder_model: str = "nomic-embed-text"
+    long_term_embedder_base_url: str = "http://localhost:11434"
+
+    # Auto-save configuration
+    auto_save_to_long_term: bool = True
+    auto_save_importance_threshold: float = 0.7
+
+    # Retrieval configuration
+    retrieval_top_k: int = 5
+    retrieval_min_score: float = 0.5
+
+
 class Config(BaseModel):
     """Main configuration."""
 
@@ -77,6 +101,7 @@ class Config(BaseModel):
     conversation: ConversationConfig = Field(default_factory=ConversationConfig)
     cli: CliConfig = Field(default_factory=CliConfig)
     rag: RagConfig = Field(default_factory=RagConfig)
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Config":

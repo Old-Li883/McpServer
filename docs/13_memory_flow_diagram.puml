@@ -1,0 +1,305 @@
+@startuml 记忆系统协同工作流程
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam activity {
+    BackgroundColor #E3F2FD
+    BorderColor #2196F3
+    FontColor #0D47A1
+}
+skinparam note {
+    BackgroundColor #FFF9C4
+    BorderColor #FBC02D
+}
+skinparam code {
+    BackgroundColor #E8F5E9
+    FontColor #1B5E20
+}
+
+title 记忆系统协同工作流程图\n(Memory System Collaboration Flow)
+
+|User|
+start
+:用户输入消息;
+|AgentEngine|
+
+|#LightBlue|短期记忆 (Short-Term)|
+partition "添加消息到短期记忆" {
+    :生成唯一ID;
+    note right
+      <b>关键代码</b>
+      <code>
+await self._memory_orchestrator.
+  add_conversation_message(
+    message_id=str(uuid.uuid4()),
+    role="user",
+    content=user_message,
+  )
+      </code>
+    end note
+
+    :ImportanceScorer评分;
+    note right
+      <b>重要性评分规则</b>
+      <code>
+// 基础分0.5
+// 用户消息 +0.2
+// 问题关键词 +0.15
+// 代码内容 +0.2
+// 礼貌用语 -0.3
+score = await scorer.score(
+  content, role
+)  // 返回 0.0-1.0
+      </code>
+    end note
+
+    :存入短期记忆列表;
+    note right
+      <b>数据结构</b>
+      <code>
+ConversationMemory {
+  message_id: str
+  role: str
+  content: str
+  importance_score: float
+  timestamp: datetime
+  is_summary: bool
+}
+      </code>
+    end note
+
+    :检查是否超过阈值?;
+    if (超过100条?) then (是)
+        :分组低重要性消息;
+        :Summarizer生成摘要;
+        note right
+          <b>摘要策略</b>
+          <code>
+// 提取用户讨论主题
+// 统计助手响应数
+// 合并为简短摘要
+summary = await summarizer.
+  summarize_messages(
+    low_importance_msgs
+  )
+          </code>
+        end note
+        :用摘要替换原消息;
+    else (否)
+    endif
+}
+
+|#LightGreen|长期记忆 (Long-Term)|
+partition "检索相关记忆" {
+    :语义向量检索;
+    note right
+      <b>关键代码</b>
+      <code>
+memory_result = await self.
+  _memory_orchestrator.
+  retrieve_relevant_memories(
+    query=user_message,
+    top_k=5
+  )
+      </code>
+    end note
+
+    :ChromaDB向量搜索;
+    note right
+      <b>向量检索流程</b>
+      <code>
+// 1. 生成查询向量
+query_emb = await embedder.
+  embed(query)
+
+// 2. 余弦相似度搜索
+results = chroma_db.query(
+  query_embeddings,
+  n_results=5
+)
+
+// 3. 转换为Memory对象
+memories = [(Memory, score)
+  for result in results]
+      </code>
+    end note
+
+    :格式化记忆上下文;
+    note right
+      <b>格式化输出</b>
+      <code>
+## Relevant Memories
+
+### Memory 1 (Relevance: 80%)
+Type: user_preference
+内容: 用户偏好使用Python...
+
+### Memory 2 (Relevance: 75%)
+Type: task_context
+内容: 正在开发数据分析项目...
+      </code>
+    end note
+}
+
+|#Orange|上下文整合 (Context Integration)|
+partition "整合多源上下文" {
+    :收集记忆上下文;
+    :收集RAG上下文;
+    note right
+      <b>上下文合并</b>
+      <code>
+contexts = []
+
+if memory_context:
+  contexts.append(
+    memory_context
+  )
+if rag_context:
+  contexts.append(
+    rag_context
+  )
+
+enhanced = "\n\n".join(
+  contexts
+) + "\n\nUser: " + query
+      </code>
+    end note
+
+    :构建增强消息;
+}
+
+|#LightCoral|LLM处理 (LLM Processing)|
+partition "生成响应" {
+    :调用LLM生成响应;
+    note right
+      <b>完整上下文</b>
+      <code>
+messages = [
+  {
+    "role": "system",
+    "content": system_prompt
+  },
+  {
+    "role": "user",
+    "content":
+      ## Relevant Memories
+      ...记忆内容...
+
+      ## RAG Knowledge
+      ...知识库内容...
+
+      User: 原始问题
+  }
+]
+
+response = await llm.chat(
+  messages
+)
+      </code>
+    end note
+
+    :工具调用迭代(最多5次);
+    :返回最终响应;
+}
+
+|#LightBlue|短期记忆 (Short-Term)|
+:添加助手响应到短期记忆;
+note right
+  <b>记录助手输出</b>
+  <code>
+await orchestrator.
+  add_conversation_message(
+    message_id=str(uuid.uuid4()),
+    role="assistant",
+    content=response
+  )
+  </code>
+end note
+
+|#LightGreen|长期记忆 (Long-Term)|
+partition "自动保存重要记忆" {
+    :获取高重要性记忆;
+    note right
+      <b>筛选条件</b>
+      <code>
+// 重要性 >= 0.7
+// 非摘要消息
+// 用户或助手角色
+memories_to_save = [
+  m for m in short_term.memories
+  if m.importance >= 0.7
+  and not m.is_summary
+  and m.role in ["user","assistant"]
+]
+      </code>
+    end note
+
+    if (有重要记忆?) then (是)
+        :MemoryClassifier分类;
+        note right
+          <b>自动分类</b>
+          <code>
+// USER_PREFERENCE
+//   "我喜欢", "我偏好"
+// TASK_CONTEXT
+//   "正在做", "任务"
+// CONVERSATION
+//   默认类型
+memory_type = classifier.classify(
+  content, role
+)
+          </code>
+        end note
+
+        :生成嵌入向量;
+        :存入ChromaDB;
+        note right
+          <b>持久化存储</b>
+          <code>
+// 转换为Document格式
+doc = Document(
+  id=memory.id,
+  content=memory.content,
+  metadata={
+    "memory_type": "user_preference",
+    "importance": "important",
+    "timestamp": "...",
+    "access_count": 0
+  },
+  embedding=memory.embedding
+)
+
+// 添加到向量存储
+await vector_store.add_documents(
+  [doc]
+)
+          </code>
+        end note
+
+        :记录保存数量;
+    else (否)
+    endif
+}
+
+|AgentEngine|
+:返回响应给用户;
+|User|
+:显示响应;
+
+stop
+
+legend right
+  <b>记忆系统特性</b>
+
+  * <b>短期记忆</b>: 会话内管理，自动压缩
+  * <b>长期记忆</b>: 跨会话持久化，语义检索
+  * <b>自动评分</b>: 基于规则的重要性评分
+  * <b>智能分类</b>: 自动识别记忆类型
+  * <b>上下文整合</b>: 记忆与RAG协同工作
+
+  <b>配置参数</b>
+  * short_term_max_messages: 100
+  * auto_save_importance_threshold: 0.7
+  * retrieval_top_k: 5
+endlegend
+
+@enduml

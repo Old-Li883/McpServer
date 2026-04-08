@@ -58,3 +58,24 @@ cli:
   prompt_symbol: "> "
   multiline_prompt_symbol: "... "
   show_thinking: true
+
+memory:
+  # Short-term memory configuration
+  short_term_max_messages: 100
+  short_term_summary_threshold: 80
+  short_term_importance_threshold: 0.6
+
+  # Long-term memory configuration
+  long_term_enabled: true
+  long_term_vector_db_path: "./data/memory_chroma"
+  long_term_collection_name: "long_term_memory"
+  long_term_embedder_model: "nomic-embed-text"
+  long_term_embedder_base_url: "http://localhost:11434"
+
+  # Auto-save configuration
+  auto_save_to_long_term: true
+  auto_save_importance_threshold: 0.7
+
+  # Retrieval configuration
+  retrieval_top_k: 5
+  retrieval_min_score: 0.5

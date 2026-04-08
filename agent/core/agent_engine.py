@@ -23,6 +23,13 @@ try:
 except ImportError:
     RAG_AVAILABLE = False
 
+# Memory imports (optional)
+try:
+    from agent.memory.integration.memory_orchestrator import MemoryOrchestrator
+    MEMORY_AVAILABLE = True
+except ImportError:
+    MEMORY_AVAILABLE = False
+
 
 class AgentEngine:
     """Core agent engine that orchestrates all components.
@@ -63,6 +70,10 @@ class AgentEngine:
         self._rag_always_enabled: bool = False  # Always use RAG for all queries
         self._rag_context_cache: dict[str, str] = {}  # Query -> context cache
 
+        # Memory integration (optional)
+        self._memory_orchestrator: Optional[MemoryOrchestrator] = None
+        self._memory_enabled = False
+
     async def initialize(self) -> None:
         """Initialize the agent engine.
 
@@ -79,6 +90,10 @@ class AgentEngine:
         # Initialize RAG if enabled
         if RAG_AVAILABLE and hasattr(self.config, 'rag') and self.config.rag.enabled:
             await self._initialize_rag()
+
+        # Initialize Memory if enabled
+        if MEMORY_AVAILABLE and hasattr(self.config, 'memory') and self.config.memory.long_term_enabled:
+            await self._initialize_memory()
 
     async def process_message(
         self,
@@ -99,6 +114,29 @@ class AgentEngine:
         Raises:
             Exception: If processing fails
         """
+        # Add to short-term memory
+        if self._memory_enabled:
+            import uuid
+            await self._memory_orchestrator.add_conversation_message(
+                message_id=str(uuid.uuid4()),
+                role="user",
+                content=user_message,
+            )
+
+        # Retrieve relevant memories
+        memory_context = ""
+        if self._memory_enabled:
+            try:
+                memory_result = await self._memory_orchestrator.retrieve_relevant_memories(
+                    query=user_message,
+                    top_k=self.config.memory.retrieval_top_k,
+                )
+
+                if memory_result.memories:
+                    memory_context = self._memory_orchestrator.format_memories_for_llm(memory_result)
+            except Exception as e:
+                print(f"Memory retrieval failed: {e}")
+
         # RAG enhancement (if enabled and applicable)
         rag_context = ""
         if self._rag_enabled and (use_rag is None or use_rag):
@@ -106,16 +144,41 @@ class AgentEngine:
             if should_use_rag:
                 rag_context = await self._rag_enhance_query(user_message)
 
-        # Add enhanced user message to conversation
+        # Combine all contexts
         enhanced_message = user_message
+        contexts = []
+
+        if memory_context:
+            contexts.append(memory_context)
         if rag_context:
-            enhanced_message = f"{rag_context}\n\nUser question: {user_message}"
+            contexts.append(rag_context)
+
+        if contexts:
+            enhanced_message = "\n\n".join(contexts) + f"\n\nUser question: {user_message}"
 
         # Add user message to conversation
         self.conversation.add_user_message(enhanced_message)
 
         # Process with potential tool calls
         response = await self._process_with_tools(max_tool_iterations, user_message)
+
+        # Add assistant response to short-term memory
+        if self._memory_enabled:
+            import uuid
+            await self._memory_orchestrator.add_conversation_message(
+                message_id=str(uuid.uuid4()),
+                role="assistant",
+                content=response,
+            )
+
+            # Auto-save important memories to long-term storage
+            if self.config.memory.auto_save_to_long_term:
+                try:
+                    saved_count = await self._memory_orchestrator.save_important_memories()
+                    if saved_count > 0:
+                        print(f"Saved {saved_count} memories to long-term storage")
+                except Exception as e:
+                    print(f"Failed to save memories: {e}")
 
         return response
 
@@ -336,6 +399,7 @@ class AgentEngine:
             "tools": self.get_available_tools(),
             "llm_model": self.config.llm.model,
             "rag_enabled": self._rag_enabled,
+            "memory_enabled": self._memory_enabled,
         }
 
         # Get MCP server capabilities
@@ -353,7 +417,97 @@ class AgentEngine:
         if self._rag_enabled and self._rag_engine:
             capabilities["rag"] = self._rag_engine.get_stats()
 
+        # Get Memory capabilities
+        if self._memory_enabled and self._memory_orchestrator:
+            capabilities["memory"] = self._memory_orchestrator.get_stats()
+
         return capabilities
+
+    # ========== Memory Integration Methods ==========
+
+    async def _initialize_memory(self) -> None:
+        """Initialize the memory system.
+
+        Raises:
+            Exception: If memory initialization fails
+        """
+        if not MEMORY_AVAILABLE:
+            raise Exception("Memory module not available")
+
+        # Create and initialize memory orchestrator
+        self._memory_orchestrator = MemoryOrchestrator(
+            short_term_max_messages=self.config.memory.short_term_max_messages,
+            long_term_vector_db_path=self.config.memory.long_term_vector_db_path,
+            long_term_embedder_model=self.config.memory.long_term_embedder_model,
+            auto_save_threshold=self.config.memory.auto_save_importance_threshold,
+        )
+
+        await self._memory_orchestrator.initialize()
+        self._memory_enabled = True
+
+    async def create_memory(
+        self,
+        content: str,
+        memory_type: str,
+        importance: str = "important",
+    ) -> dict:
+        """Manually create a memory.
+
+        Args:
+            content: Memory content
+            memory_type: Type of memory (user_preference/task_context/knowledge)
+            importance: Importance level (critical/important/normal/trivial)
+
+        Returns:
+            Created memory as dictionary
+        """
+        if not self._memory_enabled:
+            raise Exception("Memory system is not enabled")
+
+        from agent.memory.types import MemoryType
+
+        memory = await self._memory_orchestrator.create_manual_memory(
+            content=content,
+            memory_type=MemoryType(memory_type),
+            importance=importance,
+        )
+
+        return memory.to_dict()
+
+    async def search_memories(self, query: str, top_k: int = 5) -> list[dict]:
+        """Search memories.
+
+        Args:
+            query: Search query
+            top_k: Number of results
+
+        Returns:
+            List of memories as dictionaries
+        """
+        if not self._memory_enabled:
+            raise Exception("Memory system is not enabled")
+
+        memories = await self._memory_orchestrator.search_memories(query, top_k)
+        return [m.to_dict() for m in memories]
+
+    def get_memory_stats(self) -> dict:
+        """Get memory system statistics.
+
+        Returns:
+            Dictionary with memory statistics
+        """
+        if not self._memory_enabled:
+            return {"enabled": False}
+
+        return self._memory_orchestrator.get_stats()
+
+    async def clear_conversation(self) -> None:
+        """Clear the conversation history."""
+        self.conversation.clear()
+
+        # Also clear short-term memory
+        if self._memory_enabled:
+            await self._memory_orchestrator.clear_conversation()
 
     # ========== RAG Integration Methods ==========
 
