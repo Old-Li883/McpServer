@@ -259,9 +259,12 @@ class RAGEngine:
             Formatted context string
         """
         if not sources:
-            return "No relevant information found."
+            return "No relevant information found in the knowledge base. If you don't have relevant context, say you don't know."
 
         context_parts = []
+        context_parts.append("# Knowledge Base Search Results\n")
+        context_parts.append("The following are relevant documents retrieved from the knowledge base. Please answer **ONLY** based on this information:\n")
+
         for i, source in enumerate(sources, 1):
             # Get source metadata
             source_name = source.document.metadata.get("source", "Unknown")
@@ -271,11 +274,17 @@ class RAGEngine:
                 chunk_info = f" [Chunk: {source.document.metadata['chunk_id']}]"
 
             context_parts.append(
-                f"[Source {i}] (score: {source.score:.3f}){chunk_info}\n"
-                f"{source.document.content}"
+                f"## [Source {i}] (relevance: {source.score:.1%}){chunk_info}\n"
+                f"{source.document.content}\n"
             )
 
-        return "\n\n".join(context_parts)
+        context_parts.append("\n---\n")
+        context_parts.append("**IMPORTANT REMINDERS**:\n")
+        context_parts.append("- You MUST cite specific sources [Source X] when answering\n")
+        context_parts.append("- If there's no answer in the above content, clearly say \"Based on available materials, I cannot answer\"\n")
+        context_parts.append("- Do NOT add information from outside the knowledge base\n")
+
+        return "\n".join(context_parts)
 
     def _generate_answer(
         self,
@@ -289,19 +298,17 @@ class RAGEngine:
         For now, returns a simple formatted response.
         """
         if not sources:
-            return f"I couldn't find relevant information for: {query}"
+            return f"## Search Results\n\nNo relevant information found in the knowledge base for:\n\nQuestion: {query}\n\nSuggestions:\n- Check if the question is phrased accurately\n- Try using different keywords\n- Or contact admin to add relevant documents"
+
+        # Check if max score is too low
+        max_score = max(s.score for s in sources)
+        if max_score < 0.6:
+            return f"## Search Results\n\nFound some possibly relevant documents (low relevance, max {max_score:.1%}):\n\n{context}\n\n⚠️ Note: The above documents have low relevance, the answer may not be accurate."
 
         answer_parts = [
-            f"Based on {len(sources)} relevant document(s) from the knowledge base:\n",
+            f"## Search Results\n\nFound {len(sources)} relevant document(s) (relevance: {max_score:.1%} - {min(s.score for s in sources):.1%}):\n",
             context,
         ]
-
-        # Add source references
-        if sources:
-            answer_parts.append("\n\nSources:")
-            for i, source in enumerate(sources, 1):
-                source_name = source.document.metadata.get("source", "Unknown")
-                answer_parts.append(f"  {i}. {source_name} (relevance: {source.score:.2f})")
 
         return "\n".join(answer_parts)
 
