@@ -31,5 +31,8 @@ __pycache__/
 # OS
 .DS_Store
 
+# Worktrees
+.worktrees/
+
 /data/*
 /logs/*
