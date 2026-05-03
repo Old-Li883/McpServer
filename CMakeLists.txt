@@ -239,6 +239,9 @@ target_link_libraries(test_mcp_server PRIVATE
 )
 link_gtest(test_mcp_server)
 
+# ========== 启用测试 ==========
+enable_testing()
+
 # ========== 启用测试发现 ==========
 include(GoogleTest)
 gtest_discover_tests(test_logger)
