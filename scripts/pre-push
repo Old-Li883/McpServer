@@ -7,10 +7,7 @@ if [ "${SKIP_TESTS:-0}" = "1" ]; then
     exit 0
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# If running from .git/hooks/, find project root via git
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUN_TESTS="$PROJECT_ROOT/scripts/run_all_tests.sh"
 
 if [ ! -f "$RUN_TESTS" ]; then
