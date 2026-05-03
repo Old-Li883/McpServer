@@ -1,0 +1,217 @@
+@startuml RAG组件详细流程图
+title RAG (Retrieval-Augmented Generation) 组件流程图
+
+skinparam backgroundColor #FEFEFE
+skinparam handwritten false
+skinparam shadowing false
+skinparam noteFontSize 10
+skinparam noteBackgroundColor #FEFECE
+
+start
+
+:接收文档源;
+note right
+  本地文件、网页、代码仓库
+end note
+
+partition "文档加载" #LightBlue {
+  :LoaderRegistry加载器注册;
+  note right
+    支持多种加载器:
+    - DocumentLoader (本地文件)
+    - WebCrawler (网页抓取)
+    - CodeLoader (代码仓库)
+  end note
+
+  if (源类型?) then (本地文件)
+    :使用DocumentLoader;
+  elseif (源类型?) then (网页URL)
+    :使用WebCrawler;
+  elseif (源类型?) then (Git仓库)
+    :使用CodeLoader;
+  endif
+
+  :返回Document列表;
+}
+
+partition "文档预处理" #LightGreen {
+  fork
+    :文本预处理;
+    note right
+      **TextPreprocessor**
+      - 清理空白字符
+      - 规范化引号
+      - 移除URL/邮箱
+    end note
+  fork again
+    if (检测到中文?) then (是)
+    :中文优化;
+    note right
+      **ChineseTextProcessor**
+      - jieba分词
+      - 混合语言处理
+      - 查询扩展
+    end note
+  else (否)
+    :跳过中文处理;
+  endif
+  end fork
+
+  :返回预处理后的Document;
+}
+
+partition "文档分块" #LightYellow {
+  :ChunkerFactory自动检测策略;
+
+  if (文档类型?) then (Markdown)
+    :使用MarkdownChunker;
+    note right
+      按标题结构分块
+      保留文档层级
+    end note
+  elseif (文档类型?) then (代码)
+    :使用CodeChunker;
+    note right
+      按函数/类分块
+      保留代码结构
+    end note
+  else (其他)
+    :使用SemanticChunker;
+    note right
+      按语义边界分块
+      保持句子完整
+    end note
+  endif
+
+  :返回Chunk列表;
+  note right
+    每个Chunk包含:
+    - content
+    - chunk_id
+    - token_count
+    - metadata
+  end note
+}
+
+partition "嵌入生成" #LightCoral {
+  :遍历每个Chunk;
+
+  while (还有Chunk?) is (是)
+    :获取下一个Chunk;
+
+    if (启用缓存?) then (是)
+      if (缓存存在?) then (是)
+        :使用缓存嵌入;
+      else (否)
+        :调用OllamaEmbedder;
+        note right
+          POST /api/embeddings
+          model: nomic-embed-text
+        end note
+
+        :存储到缓存;
+      endif
+    else (否)
+      :调用OllamaEmbedder;
+    endif
+
+    :将嵌入添加到Chunk;
+  endwhile (否)
+
+  :返回带嵌入的Chunk;
+}
+
+partition "向量存储" #Lavender {
+  :初始化ChromaDB;
+  note right
+    **ChromaVectorStore**
+    持久化存储
+  end note
+
+  :创建或获取集合(Collection);
+
+  :批量添加Chunk到集合;
+  note right
+    - ids: chunk_id列表
+    - embeddings: 嵌入向量
+    - metadatas: 元数据
+    - documents: 文本内容
+  end note
+
+  :添加到向量索引;
+  note right
+    HNSW算法
+    余弦相似度
+  end note
+
+  :返回添加的文档数量;
+}
+
+stop
+
+note right
+  **添加流程完成**
+  文档已准备好用于检索
+end note
+
+partition "查询流程" #LightPink {
+  start
+
+  :接收用户查询;
+
+  if (启用中文优化?) then (是)
+    :优化查询文本;
+    note right
+      **ChineseTextProcessor**
+      - 分词
+      - 同义词扩展
+      - 混合语言处理
+    end note
+  endif
+
+  :生成查询嵌入;
+  note right
+    OllamaEmbedder.embed(query)
+  end note
+
+  :向量相似度搜索;
+  note right
+    ChromaDB.query()
+    返回top_k个最相似Chunk
+  end note
+
+  :过滤低分结果;
+  note right
+    score >= threshold
+  end note
+
+  :重排序(可选);
+  note right
+    CrossEncoder rerank
+    提高相关性
+  end note
+
+  :构建上下文;
+  note right
+    **ContextBuilder**
+    按相关性排序
+    截断到N个文档
+  end note
+
+  :生成回答;
+  note right
+    LLM基于上下文生成
+    引用来源文档
+  end note
+
+  :返回QueryResult;
+  note right
+    - answer: 回答
+    - sources: 来源列表
+    - retrieved_docs: 文档列表
+  end note
+
+  stop
+}
+
+@enduml

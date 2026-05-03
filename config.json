@@ -1,0 +1,13 @@
+{
+  "server": {
+    "port": 8080,
+    "mode": "http"
+  },
+  "logging": {
+    "log_file_path": "logs/mcpserver.log",
+    "log_level": "debug",
+    "log_file_size": 10485760,
+    "log_file_count": 5,
+    "log_console_output": true
+  }
+}

@@ -1,0 +1,157 @@
+@startuml JSON-RPC模块数据流动架构图
+title JSON-RPC 模块数据流动架构图
+
+' 定义样式
+skinparam rectangle {
+    BackgroundColor<<core>> #E3F2FD
+    BackgroundColor<<stdio>> #E8F5E9
+    BackgroundColor<<http>> #FFF3E0
+    BorderColor<<core>> #1976D2
+    BorderColor<<stdio>> #388E3C
+    BorderColor<<http>> #F57C00
+    RoundCorner 10
+    BorderThickness 2
+}
+
+skinparam arrow {
+    Color #546E7A
+    Thickness 2
+}
+
+skinparam note {
+    BackgroundColor #FAFAFA
+    BorderColor #9E9E9E
+}
+
+skinparam message {
+    BackgroundColor #ECEFF1
+    BorderColor #607D8B
+}
+
+' ==================== 布局 ====================
+
+' 左侧：Stdio客户端
+rectangle "Stdio 客户端" <<client>> as StdioClient #F5F5F5 {
+    rectangle "标准输入 (stdin)" <<stdio>> as Stdin
+    rectangle "标准输出 (stdout)" <<stdio>> as Stdout
+}
+
+' 中间上：StdioJsonRpc传输层
+rectangle "StdioJsonRpc 传输层" <<stdio>> as StdioTransport {
+    rectangle "消息读取\n(逐行/LSP格式)" <<stdio>> as StdioRead
+    rectangle "消息发送\n(Content-Length)" <<stdio>> as StdioWrite
+    rectangle "异步读取线程" <<stdio>> as StdioThread
+}
+
+' 中间：JsonRpc核心处理器
+rectangle "JsonRpc 核心处理器" <<core>> as Core {
+    rectangle "方法注册表\n(Method Registry)" <<core>> as MethodRegistry
+    rectangle "请求处理器\n(Request Handler)" <<core>> as RequestHandler
+    rectangle "批量请求支持\n(Batch Support)" <<core>> as BatchSupport
+    rectangle "错误处理\n(Error Handler)" <<core>> as ErrorHandler
+}
+
+' 右侧：HttpJsonRpcServer传输层
+rectangle "HttpJsonRpcServer 传输层" <<http>> as HttpTransport {
+    rectangle "HTTP POST 处理器" <<http>> as HttpPost
+    rectangle "SSE 推送服务" <<http>> as SseServer
+    rectangle "线程池管理" <<http>> as ThreadPool
+}
+
+' 右侧：HTTP客户端
+rectangle "HTTP 客户端" <<client>> as HttpClient #F5F5F5 {
+    rectangle "HTTP POST 请求" <<http>> as HttpRequest
+    rectangle "SSE 订阅" <<http>> as SseClient
+}
+
+' 底部：业务逻辑层
+rectangle "业务逻辑方法" <<business>> as Business #F3E5F5 {
+    rectangle "工具调用" <<method>> as ToolMethod
+    rectangle "资源操作" <<method>> as ResourceMethod
+    rectangle "提示管理" <<method>> as PromptMethod
+}
+
+' ==================== 数据流：输入 ====================
+
+' Stdio输入流
+Stdin -down-> StdioRead : **JSON-RPC请求**
+note right of StdioRead
+  读取流程：
+  1. 解析 Content-Length
+  2. 读取完整消息
+  3. 验证消息格式
+end note
+
+StdioRead -down-> RequestHandler : **解析后的请求**
+
+' HTTP输入流
+HttpRequest -down-> HttpPost : **HTTP POST /rpc**
+note right of HttpPost
+  请求流程：
+  1. 接收HTTP请求
+  2. 解析JSON body
+  3. 提取JSON-RPC消息
+end note
+
+HttpPost -down-> RequestHandler : **解析后的请求**
+
+' ==================== 数据流：核心处理 ====================
+
+RequestHandler -down-> MethodRegistry : **查找方法**
+MethodRegistry -down-> Business : **执行业务逻辑**
+
+note right of RequestHandler
+  核心处理：
+  • 单请求/批量请求
+  • 通知（无响应）
+  • 参数验证
+  • 异常捕获
+end note
+
+' ==================== 数据流：输出 ====================
+
+' Stdio输出流
+Business -up-> StdioWrite : **处理结果**
+StdioWrite -up-> Stdout : **JSON-RPC响应**
+note left of StdioWrite
+  响应格式：
+  Content-Length: xxx\n\n
+  {json响应}
+end note
+
+' HTTP输出流
+Business -up-> HttpPost : **处理结果**
+HttpPost -up-> HttpRequest : **HTTP 200 响应**
+
+' SSE推送流
+Business -right-> SseServer : **实时事件**
+SseServer -right-> SseClient : **SSE 数据推送**
+note bottom of SseServer
+  SSE 格式：
+  data: {json}\n\n
+  event: 类型\n\n
+  id: ID\n\n
+end note
+
+' ==================== 图例 ====================
+
+rectangle "图例" as Legend #FFFFFF {
+    rectangle "核心处理器" <<core>> as LCore
+    rectangle "Stdio传输层" <<stdio>> as LStdio
+    rectangle "HTTP传输层" <<http>> as LHttp
+    rectangle "业务逻辑" <<business>> as LBusiness
+}
+
+note top of Legend
+  **数据流方向**
+  ↓ 输入流（客户端 → 服务端）
+  ↑ 输出流（服务端 → 客户端）
+end note
+
+' ==================== 连接线标注 ====================
+
+StdioRead -right-> BatchSupport : 批量处理\n支持
+ThreadPool -left-> RequestHandler : 并发请求\n处理
+SseServer -left-> ErrorHandler : 错误推送\n通知
+
+@enduml

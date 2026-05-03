@@ -1,0 +1,293 @@
+@startuml RAG查询检索流程
+title RAG 查询检索流程 - 从用户输入到 LLM 上下文
+
+skinparam backgroundColor #FEFEFE
+skinparam ActivityBackgroundColor #E8F5E9
+skinparam ActivityBorderColor #4CAF50
+skinparam NoteBackgroundColor #FFF9C4
+skinparam ArrowColor #333333
+
+start
+
+:用户输入自然语言问题;
+note right
+  例如: "什么是向量数据库？"
+end note
+
+:AgentEngine.process_message(user_message);
+note right
+  **agent_engine.py:82-119**
+end note
+
+note right
+  **agent_engine.py:101-106**
+  rag_context = ""
+  if self._rag_enabled and (use_rag is None or use_rag):
+      should_use_rag = use_rag if use_rag is not None else self._should_use_rag(user_message)
+      if should_use_rag:
+          rag_context = await self._rag_enhance_query(user_message)
+end note
+
+:AgentEngine._should_use_rag(message)
+  判断是否需要使用 RAG;
+note right
+  **agent_engine.py:378-414**
+  def _should_use_rag(self, message: str) -> bool:
+      if self._rag_always_enabled:
+          return True
+      if "?" in message or "？" in message:
+          return True
+      question_words = ["什么", "how", "why", ...]
+      if any(word in message_lower for word in question_words):
+          return True
+      return False
+end note
+
+if (需要使用 RAG?) then (是)
+
+partition "RAG 查询增强" #LightBlue {
+
+  :AgentEngine._rag_enhance_query(query);
+  note right
+    **agent_engine.py:416-449**
+  end note
+
+  :检查缓存
+    query in _rag_context_cache?;
+  note right
+    **agent_engine.py:429-431**
+    if query in self._rag_context_cache:
+        return self._rag_context_cache[query]
+  end note
+
+  if (缓存命中?) then (是)
+    :返回缓存上下文;
+  else (未命中)
+
+    :RAGEngine.query(query, top_k=3);
+    note right
+      **rag_engine.py:190-250**
+    end note
+
+    partition "查询优化" #LightGreen {
+      :检测是否为中文内容;
+      if (是中文?) then (是)
+        :ChineseTextProcessor.optimize_for_search()
+          优化查询语句;
+        note right
+          **chinese_optimizer.py**
+          jieba 分词
+          保留关键词
+          优化句子结构
+          提升检索精度
+        end note
+      endif
+    }
+
+    partition "向量检索" #LightYellow {
+      :OllamaEmbedder.embed(query)
+        生成查询向量;
+      note right
+        **ollama_embedder.py:117-132**
+        async def _generate_embedding(self, text: str):
+            response = await self.client.post(
+                "/api/embeddings",
+                json={"model": "nomic-embed-text", "prompt": text}
+            )
+            return response.json()["embedding"]
+      end note
+
+      :ChromaVectorStore.search(query_embedding, top_k=3);
+      note right
+        **chroma_store.py:106-156**
+      end note
+
+      :ChromaDB HNSW 算法
+        余弦相似度搜索;
+      note right
+        **chroma_store.py:129-133**
+        results = self._collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+            where=filter,
+        )
+      end note
+
+      :返回原始结果;
+      note right
+        distances[]: 距离值
+        documents[]: 匹配文档
+        metadatas[]: 元数据
+      end note
+
+      :距离转相似度分数;
+      note right
+        **chroma_store.py:148-149**
+        distance = results["distances"][0][i]
+        score = 1 / (1 + distance)
+      end note
+
+      :构建 SearchResult 列表;
+      note right
+        SearchResult {
+          document: Document,
+          score: float
+        }
+      end note
+    }
+
+    partition "结果过滤" #Lavender {
+      :应用相似度阈值过滤
+        score >= score_threshold;
+      note right
+        **rag_engine.py:227-230**
+        filtered_sources = [
+            s for s in sources
+            if s.score >= self.config.score_threshold
+        ]
+      end note
+
+      :按相似度降序排序;
+    }
+
+    partition "上下文构建" #LightCoral {
+      :RAGEngine._build_context(sources);
+      note right
+        **rag_engine.py:252-278**
+      end note
+
+      :遍历每个 SearchResult;
+      note right
+        **rag_engine.py:265-276**
+        for i, source in enumerate(sources, 1):
+            source_name = source.document.metadata.get("source")
+            score = source.score
+            context_parts.append(
+                f"[Source {i}] (score: {score:.3f})\n"
+                f"{source.document.content}"
+            )
+      end note
+
+      :格式化上下文字符串;
+      note right
+        **输出示例**
+        [Source 1] (score: 0.890)
+        向量数据库是一种专门用于存储和检索向量数据的数据库...
+        它使用高维向量来表示数据，通过余弦相似度等进行检索。
+
+        [Source 2] (score: 0.760)
+        ChromaDB 是一个开源的向量数据库，支持本地部署...
+        它使用 HNSW 算法进行高效的近似最近邻搜索。
+      end note
+
+      :返回 context 字符串;
+    }
+
+    partition "答案生成" #Pink {
+      :RAGEngine._generate_answer(query, context, sources);
+      note right
+        **rag_engine.py:280-306**
+      end note
+
+      :构建最终答案;
+      note right
+        **rag_engine.py:294-305**
+        answer_parts = [
+            f"Based on {len(sources)} relevant document(s):\n",
+            context,
+        ]
+        if sources:
+            answer_parts.append("\n\nSources:")
+            for i, source in enumerate(sources, 1):
+                source_name = source.document.metadata.get("source")
+                answer_parts.append(
+                    f"  {i}. {source_name} (relevance: {source.score:.2f})"
+                )
+      end note
+
+      :返回 QueryResult;
+      note right
+        answer: 完整答案（包含上下文）
+        sources: SearchResult[]
+        retrieved_docs: Document[]
+      end note
+    }
+
+    :缓存查询结果
+      _rag_context_cache[query] = result.answer;
+
+  endif
+
+  :返回 rag_context;
+
+}
+
+endif
+
+:构建增强用户消息;
+note right
+  **agent_engine.py:109-111**
+  enhanced_message = f"{rag_context}\n\nUser question: {user_message}"
+end note
+
+:Conversation.add_user_message(enhanced_message)
+  添加到对话历史;
+
+partition "发送给 LLM" #LightYellow {
+  :Conversation.get_messages_for_llm()
+    构建完整消息列表;
+  note right
+    **conversation.py**
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": enhanced_message},
+        ...历史消息
+    ]
+  end note
+
+  :OllamaClient.chat(messages)
+    发送到 LLM;
+  note right
+    **ollama_client.py**
+    response = await self.client.post(
+        "/api/chat",
+        json={"model": "qwen2:0.5b", "messages": messages}
+    )
+  end note
+
+  :LLM 基于 RAG 上下文生成回答;
+  note right
+    **LLM 收到的完整消息示例**
+    System: You are a helpful AI assistant...
+
+    User: Based on 3 relevant document(s):
+
+    [Source 1] (score: 0.890)
+    向量数据库是一种专门用于存储和检索向量数据的数据库...
+
+    [Source 2] (score: 0.760)
+    ChromaDB 是一个开源的向量数据库...
+
+    Sources:
+      1. /path/to/vector_db.md (relevance: 0.89)
+      2. /path/to/chromadb.md (relevance: 0.76)
+
+    User question: 什么是向量数据库？
+  end note
+}
+
+:返回最终回答给用户;
+
+stop
+
+legend right
+  **颜色说明**
+  #LightBlue RAG 查询增强
+  #LightGreen 查询优化
+  #LightYellow 向量检索
+  #Lavender 结果过滤
+  #LightCoral 上下文构建
+  #Pink 答案生成
+endlegend
+
+@enduml

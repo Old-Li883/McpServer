@@ -1,0 +1,323 @@
+@startuml 记忆系统序列图
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam sequence {
+    MessageAlign center
+    NoteBackgroundColor #FFF9C4
+    NoteBorderColor #FBC02D
+}
+skinparam participant {
+    BackgroundColor #E3F2FD
+    BorderColor #2196F3
+    FontColor #0D47A1
+}
+
+title 记忆系统组件交互序列图\n(Memory System Component Interaction Sequence)
+
+actor User
+participant "AgentEngine" as Engine
+participant "MemoryOrchestrator" as Orch
+participant "ShortTermMemoryManager" as STM
+participant "LongTermMemoryStore" as LTM
+participant "ImportanceScorer" as Scorer
+participant "MemoryClassifier" as Classifier
+participant "ChromaVectorStore" as Chroma
+database "ChromaDB" as DB
+
+== 用户消息处理阶段 ==
+
+User -> Engine: process_message("我叫Alice")
+activate Engine
+
+note right of Engine
+  <b>agent_engine.py:process_message()</b>
+  <code>
+async def process_message(
+  self, user_message: str
+) -> str:
+  # 1. 添加到短期记忆
+  await self._memory_orchestrator.
+    add_conversation_message(...)
+  # 2. 检索相关记忆
+  memory_result = await self.
+    _memory_orchestrator.
+    retrieve_relevant_memories(...)
+  # 3. 整合上下文
+  # 4. 生成响应
+  # 5. 自动保存
+  </code>
+end note
+
+Engine -> Orch: add_conversation_message(msg_id, "user", content)
+activate Orch
+
+Orch -> STM: add_message(msg_id, "user", content)
+activate STM
+
+STM -> Scorer: score(content, "user")
+activate Scorer
+
+note right of Scorer
+  <b>importance_scorer.py:score()</b>
+  <code>
+score = 0.5  # 基础分
+if role == "user":
+  score += 0.2
+if "?" in content:
+  score += 0.15
+if "我喜欢" in content:
+  score += 0.15
+return min(1.0, max(0.0, score))
+  </code>
+end note
+
+Scorer --> STM: return 0.85 (高重要性)
+deactivate Scorer
+
+STM -> STM: memories.append(memory)
+
+note right of STM
+  <b>memory_manager.py:add_message()</b>
+  <code>
+memory = ConversationMemory(
+  message_id=msg_id,
+  role="user",
+  content=content,
+  importance_score=0.85
+)
+self.memories.append(memory)
+
+# 检查是否需要压缩
+if len(self.memories) > 100:
+  await self._compress_memories()
+  </code>
+end note
+
+STM --> Orch: memory created
+deactivate STM
+
+Orch --> Engine: short-term updated
+deactivate Orch
+
+== 记忆检索阶段 ==
+
+Engine -> Orch: retrieve_relevant_memories("Alice", top_k=5)
+activate Orch
+
+Orch -> LTM: search_memories(query, top_k=5)
+activate LTM
+
+LTM -> Chroma: search(query, top_k)
+activate Chroma
+
+note right of Chroma
+  <b>chroma_store.py:search()</b>
+  <code>
+# 1. 生成查询向量
+query_embedding = await
+  self.embedder.embed(query)
+
+# 2. 向量搜索
+results = self._collection.query(
+  query_embeddings=[query_emb],
+  n_results=top_k
+)
+
+# 3. 转换分数
+distance = results["distances"][0][i]
+score = 1 / (1 + distance)  # 0-1
+  </code>
+end note
+
+Chroma -> DB: SELECT * ORDER BY similarity()
+DB --> Chroma: vector results
+deactivate DB
+
+Chroma --> LTM: search results
+deactivate Chroma
+
+note right of LTM
+  <b>memory_store.py:search_memories()</b>
+  <code>
+# 转换为Memory对象
+for result in search_results:
+  memory = Memory(
+    id=result.document.id,
+    content=result.document.content,
+    memory_type=MemoryType(
+      result.document.metadata[
+        "memory_type"
+      ]
+    ),
+    importance=...,
+    timestamp=...
+  )
+  memories.append((memory, result.score))
+  </code>
+end note
+
+LTM --> Orch: [(Memory1, 0.82), (Memory2, 0.75), ...]
+deactivate LTM
+
+Orch -> Orch: 按分数排序，取top_k
+
+note right of Orch
+  <b>memory_orchestrator.py</b>
+  <code>
+all_results.sort(
+  key=lambda x: x[1],
+  reverse=True
+)
+top_results = all_results[:top_k]
+
+return MemoryQueryResult(
+  memories=[m for m,s in top_results],
+  scores=[s for m,s in top_results],
+  query=query,
+  total_count=len(all_results)
+)
+  </code>
+end note
+
+Orch --> Engine: MemoryQueryResult
+deactivate Orch
+
+== 上下文整合与响应生成 ==
+
+Engine -> Engine: 整合记忆上下文
+
+note right of Engine
+  <b>格式化记忆上下文</b>
+  <code>
+## Relevant Memories
+
+### Memory 1 (Relevance: 82%)
+Type: user_preference
+"Alice喜欢Python编程"
+
+### Memory 2 (Relevance: 75%)
+Type: user_preference
+"Alice使用Jupyter Notebook"
+  </code>
+end note
+
+Engine -> Engine: 调用LLM生成响应
+Engine --> User: "你好Alice！我记得你喜欢..."
+
+== 自动保存阶段 ==
+
+Engine -> Orch: save_important_memories()
+activate Orch
+
+Orch -> STM: get_memories_for_long_term()
+activate STM
+
+note right of STM
+  <b>筛选条件</b>
+  <code>
+return [
+  m for m in self.memories
+  if m.importance >= 0.7
+  and not m.is_summary
+  and m.role in ["user","assistant"]
+]
+  </code>
+end note
+
+STM --> Orch: [high_importance_memories]
+deactivate STM
+
+loop 每条重要记忆
+  Orch -> Classifier: classify_and_create(content, role, score)
+  activate Classifier
+
+  note right of Classifier
+    <b>memory_classifier.py:classify()</b>
+    <code>
+// 用户偏好模式
+if re.search(
+  r"i (prefer|like|want)",
+  content, re.I
+):
+  return USER_PREFERENCE
+
+// 任务上下文模式
+if re.search(
+  r"(working on|task)",
+  content, re.I
+):
+  return TASK_CONTEXT
+
+return CONVERSATION
+    </code>
+  end note
+
+  Classifier --> Orch: Memory object
+  deactivate Classifier
+
+  Orch -> LTM: add_memory(memory)
+  activate LTM
+
+  note right of LTM
+    <b>持久化存储</b>
+    <code>
+// 生成嵌入
+if not memory.embedding:
+  memory.embedding = await
+    self.embedder.embed(
+      memory.content
+    )
+
+// 转换为Document
+doc = Document(
+  id=memory.id,
+  content=memory.content,
+  metadata={
+    "memory_type": memory.type,
+    "importance": memory.importance,
+    "timestamp": memory.timestamp
+  },
+  embedding=memory.embedding
+)
+
+await self.vector_store.add_documents(
+  [doc]
+)
+    </code>
+  end note
+
+  LTM -> Chroma: add_documents([doc])
+  activate Chroma
+  Chroma -> DB: INSERT into vector store
+  DB --> Chroma: success
+  Chroma --> LTM: stored
+  deactivate DB
+  deactivate Chroma
+
+  LTM --> Orch: memory saved
+  deactivate LTM
+end
+
+Orch --> Engine: saved_count
+deactivate Orch
+
+Engine --> User: 最终响应
+deactivate Engine
+
+legend right
+  <b>组件职责</b>
+
+  * <b>AgentEngine</b>: 主流程编排
+  * <b>MemoryOrchestrator</b>: 记忆系统协调
+  * <b>ShortTermMemoryManager</b>: 会话内记忆管理
+  * <b>LongTermMemoryStore</b>: 持久化存储与检索
+  * <b>ImportanceScorer</b>: 重要性评分
+  * <b>MemoryClassifier</b>: 自动记忆分类
+
+  <b>数据流向</b>
+  用户消息 → 短期记忆 → LLM → 响应
+  用户消息 → 长期记忆检索 → 上下文增强
+  高重要性对话 → 自动分类 → 长期存储
+endlegend
+
+@enduml

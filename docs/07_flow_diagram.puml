@@ -1,0 +1,287 @@
+@startuml MCP Server - Flow Diagram
+title MCP Server 端到端流程图
+
+skinparam backgroundColor #FEFEFE
+
+' =============================================
+' 启动流程
+' =============================================
+
+start
+
+:main() 开始;
+partition "初始化阶段" #E8F5E9 {
+    :Config::getInstance()\n加载配置文件;
+    :Logger::getInstance().initialize()\n初始化日志系统;
+
+    :创建 McpServerRunnerConfig;
+    :new McpServerRunner(config);
+
+    partition "McpServerRunner 初始化" #FFF3E0 {
+        :创建 JsonRpc 处理器;
+
+        partition "McpServer 初始化" #F3E5F5 {
+            :创建 ToolManager;
+            :创建 ResourceManager;
+            :创建 PromptManager;
+            :注册 7 个 MCP 方法到 JsonRpc;
+        }
+
+        if (服务器模式?) then (HTTP)
+            :创建 HttpJsonRpcServer;
+        elseif (STDIO)
+            :创建 StdioJsonRpc;
+        else (BOTH)
+            :创建 HttpJsonRpcServer;
+            :创建 StdioJsonRpc;
+        endif
+
+        :设置信号处理器;
+    }
+
+    :注册示例工具;
+    :注册示例资源;
+    :注册示例提示词;
+    :打印服务器信息;
+}
+
+:runner.run() \n开始监听;
+
+fork
+    :HTTP 模式;
+    :httpServer_->start()\n监听 0.0.0.0:8080;
+fork again
+    :STDIO 模式;
+    :stdioTransport_->start()\n读取 stdin;
+end fork
+
+' =============================================
+' HTTP 请求处理流程
+' =============================================
+
+partition "HTTP 请求处理" #E1F5FE {
+
+    split
+        :客户端发送 HTTP POST;
+        :httplib 接收请求;
+        :提取请求体;
+    split again
+        :HTTP 服务线程;
+        :放入请求队列;
+    end split
+
+    :JsonRpc::handleRequest(jsonString);
+
+    partition "JSON-RPC 处理" #FFF9C4 {
+        :反序列化请求;
+        if (是批量请求?) then (是)
+            :遍历处理每个请求;
+        else (否)
+            :处理单个请求;
+        endif
+
+        :验证请求格式;
+        if (是通知?) then (是, 无id)
+            :执行处理;
+            stop
+        else (否, 有id)
+            :继续处理;
+        endif
+
+        :查找方法处理器;
+        if (方法存在?) then (是)
+            :执行处理器;
+        else (否)
+            :返回方法未找到错误;
+            stop
+        endif
+    }
+
+    :序列化响应;
+    :设置 HTTP 响应头;
+    :返回 JSON 响应;
+}
+
+' =============================================
+' STDIO 请求处理流程
+' =============================================
+
+partition "STDIO 请求处理" #C8E6C9 {
+
+    fork
+        :后台读取线程;
+        :阻塞读取 stdin;
+
+        partition "LSP 消息解析" #FFE0B2 {
+            :读取 Content-Length 头;
+            :解析字节数;
+            :读取指定字节的 JSON;
+        }
+
+        :提取 JSON 内容;
+    fork again
+        :主线程处理;
+        :从消息队列取消息;
+    end fork
+
+    :JsonRpc::handleRequest(jsonString);
+    note right
+        与 HTTP 模式共享
+        相同的 JSON-RPC 处理逻辑
+    end note
+
+    :生成 JSON 响应;
+
+    partition "LSP 响应格式化" #FFE0B2 {
+        :计算响应字节长度;
+        :添加 Content-Length 头;
+        :格式化为 LSP 输出;
+    }
+
+    :写入 stdout;
+    :刷新缓冲区;
+}
+
+' =============================================
+' MCP 方法处理流程
+' =============================================
+
+partition "MCP 方法分发" #E0F2F1 {
+
+    :接收方法名和参数;
+
+    switch (方法类型)
+    case (initialize)
+        :返回服务器能力;
+        stop
+
+    case (tools/list)
+        :ToolManager::listTools();
+        :返回工具列表;
+        stop
+
+    case (tools/call)
+        partition "工具调用流程" #F8BBD0 {
+            :McpServer::handleToolsCall();
+
+            :ToolManager::callTool(name, args);
+
+            :加锁查找工具;
+
+            if (工具存在?) then (是)
+                :验证参数;
+
+                partition "执行工具处理器" #FFCCBC {
+                    if (需要系统调用?) then (是)
+                        :调用 System APIs;
+                        :获取系统资源;
+                    else (否)
+                        :执行用户定义逻辑;
+                    endif
+
+                    :构造 ToolResult;
+                }
+
+                :返回 ToolResult;
+
+            else (否)
+                :返回工具未找到错误;
+            endif
+        }
+        stop
+
+    case (resources/list)
+        :ResourceManager::listResources();
+        :返回资源列表;
+        stop
+
+    case (resources/read)
+        partition "资源读取流程" #B2DFDB {
+            :McpServer::handleResourcesRead();
+
+            :ResourceManager::readResource(uri);
+
+            :加锁查找资源;
+
+            if (资源存在?) then (是)
+                partition "读取资源内容" #80CBC4 {
+                    if (是文件资源?) then (是)
+                        :访问 File System;
+                        :读取文件内容;
+                    else (否)
+                        :执行资源处理器;
+                    endif
+
+                    :构造 ResourceContent;
+                }
+
+                :返回 ResourceContent;
+
+            else (否)
+                :返回资源未找到错误;
+            endif
+        }
+        stop
+
+    case (prompts/list)
+        :PromptManager::listPrompts();
+        :返回提示词列表;
+        stop
+
+    case (prompts/get)
+        :PromptManager::getPrompt(name, args);
+        :返回提示词消息;
+        stop
+    endswitch
+}
+
+' =============================================
+' 错误处理流程
+' =============================================
+
+partition "错误处理" #FFEBEE {
+
+    :捕获异常;
+
+    switch (错误类型)
+    case (JSON 解析错误)
+        :返回 Parse Error (-32700);
+    case (无效请求)
+        :返回 Invalid Request (-32600);
+    case (方法未找到)
+        :返回 Method Not Found (-32601);
+    case (无效参数)
+        :返回 Invalid Params (-32602);
+    case (内部错误)
+        :返回 Internal Error (-32603);
+    case (工具执行错误)
+        :返回 ToolResult\nwith is_error=true;
+    case (资源读取错误)
+        :返回 ResourceContent\nwith error message;
+    endswitch
+
+    :记录错误日志;
+    :返回错误响应;
+}
+
+stop
+
+' =============================================
+' 图例
+' =============================================
+
+legend right
+    <b>流程图例:</b>
+
+    |<back:back: #E8F5E9> 绿色 | 启动阶段 |
+    |<back:back: #FFF3E0> 橙色 | 初始化 |
+    |<back:back: #E1F5FE> 蓝色 | HTTP 处理 |
+    |<back:back: #C8E6C9> 青色 | STDIO 处理 |
+    |<back:back: #E0F2F1> 青色 | MCP 方法 |
+    |<back:back: #F8BBD0> 粉色 | 工具调用 |
+    |<back:back: #B2DFDB> 青色 | 资源读取 |
+    |<back:back: #FFEBEE> 红色 | 错误处理 |
+    |<back:back: #FFE0B2> 橙色 | 外部交互 |
+endlegend
+
+@enduml

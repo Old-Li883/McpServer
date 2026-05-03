@@ -1,0 +1,81 @@
+# MCP Agent Configuration
+
+agent:
+  name: "mcp-agent"
+  log_level: "INFO"
+
+mcp:
+  server_url: "http://localhost:8080"
+  timeout: 30
+
+llm:
+  base_url: "http://localhost:11434"
+  model: "qwen2:0.5b"
+  temperature: 0.3
+  max_tokens: 2048
+
+rag:
+  enabled: true
+  always_enabled: true  # Set to true to always use RAG for all queries (ignores keyword detection)
+  embedder_model: "nomic-embed-text"
+  vector_db_path: "./data/chroma"        # 修改这里
+  collection_name: "knowledge_base"      # 修改这里
+  cache_path: "./data/embeddings_cache"
+
+conversation:
+  max_history: 100
+  system_prompt: |
+    You are a helpful AI assistant with access to tools and resources.
+
+    ## RAG Knowledge Base Usage Rules (Strictly Follow)
+
+    When answering based on retrieved content from the knowledge base, you MUST:
+
+    1. **Use Only Provided Context**: Only use information from [Source X] to answer questions. Do not add external knowledge or make up content.
+
+    2. **Cite Sources**: You MUST cite specific sources in the format `[Source X]` when answering.
+
+    3. **Honest "I Don't Know"**: If the provided context doesn't have enough information to answer the question, clearly state "Based on the available materials, I cannot answer this question" or similar.
+
+    4. **Maintain Accuracy**: If information in the context is uncertain or incomplete, inform the user honestly.
+
+    5. **Verifiability**: Every key statement you make should be traceable to a specific [Source X].
+
+    Example format:
+    "According to [Source 1], the system supports XXX functionality. [Source 2] mentions the configuration method is YYY."
+    NOT:
+    "The system supports XXX functionality (no citation)"
+
+    ## General Capabilities
+
+    You can help users by:
+    - Answering questions using your knowledge (when not using RAG)
+    - Calling available tools when needed
+    - Reading and processing resources
+    - Providing clear and concise responses
+
+cli:
+  prompt_symbol: "> "
+  multiline_prompt_symbol: "... "
+  show_thinking: true
+
+memory:
+  # Short-term memory configuration
+  short_term_max_messages: 100
+  short_term_summary_threshold: 80
+  short_term_importance_threshold: 0.6
+
+  # Long-term memory configuration
+  long_term_enabled: true
+  long_term_vector_db_path: "./data/memory_chroma"
+  long_term_collection_name: "long_term_memory"
+  long_term_embedder_model: "nomic-embed-text"
+  long_term_embedder_base_url: "http://localhost:11434"
+
+  # Auto-save configuration
+  auto_save_to_long_term: true
+  auto_save_importance_threshold: 0.7
+
+  # Retrieval configuration
+  retrieval_top_k: 5
+  retrieval_min_score: 0.5

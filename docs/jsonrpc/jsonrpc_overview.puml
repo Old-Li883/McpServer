@@ -1,0 +1,108 @@
+@startuml JSON-RPC模块整体架构
+title JSON-RPC 模块整体架构 - 双传输模式
+
+skinparam component {
+    BackgroundColor<<core>> #E3F2FD
+    BackgroundColor<<stdio>> #E8F5E9
+    BackgroundColor<<http>> #FFF3E0
+    BackgroundColor<<business>> #F3E5F5
+    BorderColor<<core>> #1976D2
+    BorderColor<<stdio>> #388E3C
+    BorderColor<<http>> #F57C00
+    BorderColor<<business>> #7B1FA2
+    ArrowColor #546E7A
+}
+
+!define COREMARKER <<core>>
+!define STDIOMARKER <<stdio>>
+!define HTTPMARKER <<http>>
+!define BUSINESSMARKER <<business>>
+
+' ==================== 左侧：Stdio模式 ====================
+
+package "Stdio 传输模式" STDIOMARKER {
+    component "Stdio 客户端" as StdioClient
+    component "StdioJsonRpc\n传输层" as StdioTransport STDIOMARKER
+    component "消息读取" as Read STDIOMARKER
+    component "消息发送" as Write STDIOMARKER
+
+    StdioClient --> Read : 请求
+    StdioClient <-- Write : 响应
+}
+
+' ==================== 中间：核心处理 ====================
+
+package "核心处理层" COREMARKER {
+    component "JsonRpc\n核心处理器" as Core COREMARKER
+    component "方法注册与分发" as Dispatcher COREMARKER
+    component "请求/响应处理" as ReqHandler COREMARKER
+    component "批量请求支持" as Batch COREMARKER
+    component "错误处理" as Error COREMARKER
+
+    ReqHandler --> Dispatcher : 调用方法
+    Batch --> ReqHandler : 批量处理
+    Error --> ReqHandler : 错误处理
+}
+
+' ==================== 右侧：HTTP模式 ====================
+
+package "HTTP 传输模式" HTTPMARKER {
+    component "HTTP 客户端" as HttpClient
+    component "HttpJsonRpcServer\n传输层" as HttpTransport HTTPMARKER
+    component "HTTP POST处理器" as Post HTTPMARKER
+    component "SSE 推送服务" as SSE HTTPMARKER
+
+    HttpClient --> Post : POST /rpc
+    HttpClient <-- Post : HTTP 200
+    HttpClient <-- SSE : SSE 推送
+}
+
+' ==================== 底部：业务层 ====================
+
+package "业务逻辑层" BUSINESSMARKER {
+    component "业务方法\n(Tools/Resources/Prompts)" as Business BUSINESSMARKER
+}
+
+' ==================== 连接：数据流 ====================
+
+' Stdio 流
+Read --> ReqHandler : JSON请求
+Write <-- ReqHandler : JSON响应
+
+' HTTP 流
+Post --> ReqHandler : JSON请求
+Post <-- ReqHandler : JSON响应
+
+' 业务调用
+Dispatcher --> Business : invoke()
+Dispatcher <-- Business : 返回结果
+
+' SSE 推送
+SSE <-- Business : 事件
+SSE --> Error : 错误推送
+
+' ==================== 注释 ====================
+
+note right of Core
+  **核心功能**
+  • 方法注册表管理
+  • JSON-RPC 2.0 协议处理
+  • 批量请求/通知支持
+  • 线程安全
+  • 异常处理
+end note
+
+note bottom of SSE
+  **服务端推送**
+  Server-Sent Events
+  实时通知客户端
+end note
+
+note bottom of Business
+  **业务方法类型**
+  • 工具调用 (Tools)
+  • 资源操作 (Resources)
+  • 提示管理 (Prompts)
+end note
+
+@enduml

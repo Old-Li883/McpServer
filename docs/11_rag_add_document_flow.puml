@@ -1,0 +1,238 @@
+@startuml RAG添加文档流程
+title RAG 添加文档处理流程 - 从文档加载到向量化存储
+
+skinparam backgroundColor #FEFEFE
+skinparam ActivityBackgroundColor #E8F5E9
+skinparam ActivityBorderColor #4CAF50
+skinparam NoteBackgroundColor #FFF9C4
+skinparam ArrowColor #333333
+
+start
+
+:用户调用 add_documents();
+note right
+  **代码**
+  await agent.rag_add_documents("./docs")
+  **agent_engine.py:451-478**
+end note
+
+:AgentEngine.rag_add_documents()
+  检查 RAG 是否初始化;
+note right
+  **agent_engine.py:451-478**
+  async def rag_add_documents(self, source: str, **kwargs) -> int:
+      if not self._rag_engine:
+          raise Exception("RAG is not enabled")
+      return await self._rag_engine.add_documents(source, **kwargs)
+end note
+
+:RAGEngine.add_documents(source)
+  **rag_engine.py:104-188**;
+
+:LoaderRegistry.load_async(source)
+  根据文件类型选择加载器;
+note right
+  **rag_engine.py:127-130**
+  documents = []
+  async for doc in self._loader_registry.load_async(source, **kwargs):
+      documents.append(doc)
+end note
+
+partition "文档加载" #LightBlue {
+  :DocumentLoader.load(source);
+  note right
+    **document_loader.py**
+  end note
+
+  :检测文件扩展名;
+
+  if (文件类型?) then (.txt, .md)
+    :_load_text_file()
+      读取文件内容;
+  elseif (.html, .htm)
+    :_load_html_file()
+      使用 BeautifulSoup 提取文本;
+    note right
+      **document_loader.py:161-173**
+      soup = BeautifulSoup(html, "html.parser")
+      for script in soup(["script", "style"]):
+          script.decompose()
+      return soup.get_text(separator="\n", strip=True)
+    end note
+  elseif (.pdf)
+    :_load_pdf_file()
+      使用 pdfplumber 提取文本;
+    note right
+      **document_loader.py:175-190**
+      import pdfplumber
+      with pdfplumber.open(file_path) as pdf:
+          for page in pdf.pages:
+              text = page.extract_text()
+    end note
+  elseif (.docx)
+    :_load_docx_file()
+      使用 python-docx 提取文本;
+    note right
+      **document_loader.py:192-203**
+      from docx import Document as DocxDocument
+      doc = DocxDocument(file_path)
+      text_parts = [para.text for para in doc.paragraphs]
+    end note
+  endif
+
+  :返回 Document 对象;
+  note right
+    content: 文档内容
+    metadata: {source, type, ...}
+  end note
+}
+
+partition "预处理" #LightGreen {
+  :TextPreprocessor.preprocess(content)
+    清理文本;
+  note right
+    **preprocessor.py**
+    清理多余空白
+    标准化换行符
+    去除特殊字符
+  end note
+
+  if (中文内容检测?) then (是)
+    :ChineseTextProcessor.optimize_for_search()
+      jieba 分词优化;
+    note right
+      **chinese_optimizer.py**
+      import jieba
+      混合语言处理
+      保留短语完整性
+      优化句子分割
+    end note
+  endif
+}
+
+partition "智能分块" #LightYellow {
+  :ChunkerFactory.auto_detect(doc)
+    自动检测最佳分块策略;
+  note right
+    **chunker.py:ChunkerFactory**
+    strategies = {
+        ".md": "markdown",
+        ".py": "code",
+        ".txt": "semantic",
+    }
+  end note
+
+  if (分块策略?) then (fixed)
+    :FixedChunker.chunk()
+      固定长度分块;
+  elseif (semantic)
+    :SemanticChunker.chunk()
+      按语义边界分块;
+    note right
+      **chunker.py:SemanticChunker**
+      按句子分割
+      合并相似句子
+      保持语义完整性
+      chunk_size=512, overlap=50
+    end note
+  elseif (markdown)
+    :MarkdownChunker.chunk()
+      保留 Markdown 结构;
+    note right
+      **chunker.py:MarkdownChunker**
+      按标题分级
+      保留代码块
+      保持列表结构
+    end note
+  elseif (code)
+    :CodeChunker.chunk()
+      按函数/类分块;
+    note right
+      **chunker.py:CodeChunker**
+      解析 AST
+      按函数/类分割
+      保留导入和注释
+    end note
+  endif
+
+  :返回 Chunk[] 列表;
+  note right
+    每个 Chunk 包含:
+    - content: 分块内容
+    - metadata: {chunk_id, parent_id, ...}
+  end note
+}
+
+partition "向量化" #Lavender {
+  :OllamaEmbedder.embed(chunk.content)
+    生成嵌入向量;
+  note right
+    **ollama_embedder.py:78-100**
+    async def embed(self, text: str) -> List[float]:
+        if self.enable_cache:
+            cached = self._get_from_cache(text)
+            if cached:
+                return cached
+
+        response = await self.client.post(
+            "/api/embeddings",
+            json={"model": "nomic-embed-text", "prompt": text}
+        )
+        return response.json()["embedding"]
+  end note
+
+  if (启用缓存?) then (是)
+    :存储到缓存
+      embeddings_cache.json;
+  endif
+
+  :返回 768 维向量;
+  note right
+    模型: nomic-embed-text
+  end note
+}
+
+partition "向量存储" #LightCoral {
+  :ChromaVectorStore.add_documents(Document[])
+    批量存储;
+  note right
+    **chroma_store.py:55-104**
+    ids = []
+    embeddings = []
+    metadatas = []
+    contents = []
+
+    for doc in documents:
+        ids.append(doc.id)
+        embeddings.append(doc.embedding)
+        metadatas.append({"source": doc.metadata.get("source")})
+        contents.append(doc.content)
+
+    self._collection.add(
+        ids=ids, embeddings=embeddings,
+        metadatas=metadatas, documents=contents
+    )
+  end note
+
+  :ChromaDB 持久化存储;
+  note right
+    **chroma_store.py:41-53**
+    路径: ./data/chroma/{collection_name}
+    使用余弦相似度 (cosine)
+  end note
+}
+
+:返回添加的分块数量;
+
+stop
+
+legend right
+  **颜色说明**
+  #LightBlue 文档加载
+  #LightGreen 预处理
+  #LightYellow 智能分块
+  #Lavender 向量化
+  #LightCoral 向量存储
+endlegend
+
+@enduml

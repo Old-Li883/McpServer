@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Git pre-push hook: runs all tests before allowing a push.
+# To skip: SKIP_TESTS=1 git push
+
+if [ "${SKIP_TESTS:-0}" = "1" ]; then
+    echo "[pre-push] Skipping tests (SKIP_TESTS=1)"
+    exit 0
+fi
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+RUN_TESTS="$PROJECT_ROOT/scripts/run_all_tests.sh"
+
+if [ ! -f "$RUN_TESTS" ]; then
+    echo "[pre-push] Error: $RUN_TESTS not found" >&2
+    exit 1
+fi
+
+echo "[pre-push] Running all tests before push..."
+echo ""
+
+if ! bash "$RUN_TESTS"; then
+    echo ""
+    echo "[pre-push] Tests failed. Push blocked."
+    echo "[pre-push] To skip tests: SKIP_TESTS=1 git push"
+    exit 1
+fi
+
+echo ""
+echo "[pre-push] All tests passed. Proceeding with push."
+exit 0

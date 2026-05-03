@@ -1,0 +1,170 @@
+@startuml MCP Agent ReAct时序图 (RAG增强版)
+title MCP Agent ReAct模式时序图 - RAG集成完整交互流程
+
+skinparam backgroundColor #FEFEFE
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 150
+skinparam noteFontSize 10
+skinparam noteBackgroundColor #FEFECE
+
+actor User
+participant "CLI" as CLI
+participant "AgentEngine" as Agent #LightBlue
+participant "Conversation" as Conv #LightGreen
+participant "RAGEngine" as RAG #Lavender
+participant "ToolOrchestrator" as Tools #LightYellow
+participant "OllamaClient" as LLM #Pink
+participant "McpClient" as MCP #LightCoral
+
+== 用户输入 ==
+
+User -> CLI: 输入消息
+CLI -> Agent: process_message(user_message)
+activate Agent
+
+note right of Agent
+  **agent_engine.py:66-89**
+  process_message() 方法
+end note
+
+== RAG 检索 (可选) ==
+
+Agent -> Agent: _should_use_rag(message?)
+note right of Agent
+  检测问题关键词
+  判断是否需要RAG
+end note
+
+alt RAG启用且需要检索
+  Agent -> RAG: _rag_enhance_query(query)
+  activate RAG
+
+  note right of RAG
+    **rag_engine.py**
+    1. 优化查询(中文优化)
+    2. 向量检索
+    3. 获取相关文档
+  end note
+
+  RAG -> RAG: 查询向量数据库(ChromaDB)
+  note right of RAG
+    **vector_store.search()**
+    top_k=3-5个最相关文档
+  end note
+
+  RAG --> Agent: 返回RAG上下文
+  deactivate RAG
+
+  Agent -> Agent: 构建增强消息
+  note right of Agent
+    原始消息 + RAG上下文
+  end note
+end
+
+Agent -> Conv: add_user_message(enhanced_message)
+activate Conv
+Conv --> Agent: 消息已添加
+deactivate Conv
+
+== ReAct循环开始 ==
+
+Agent -> Conv: get_messages_for_llm()
+activate Conv
+note right of Conv
+  返回对话历史:
+  - 系统提示
+  - RAG上下文(如有)
+  - 用户消息
+  - 之前的助手响应
+  - 之前的工具结果
+end note
+Conv --> Agent: messages[]
+deactivate Conv
+
+== Think (思考) ==
+
+Agent -> LLM: chat(messages, temp=0.7)
+activate LLM
+note right of LLM
+  **ollama_client.py**
+  调用 Ollama API
+  模型: qwen2:0.5b
+  endpoint: /api/chat
+end note
+LLM --> Agent: llm_response
+deactivate LLM
+
+Agent -> Tools: parse_tool_calls(response_text)
+activate Tools
+note right of Tools
+  **response_parser.py**
+  检测JSON格式工具调用
+  提取工具名和参数
+end note
+Tools --> Agent: ParsedResponse
+deactivate Tools
+
+== 工具推断 (可选) ==
+
+alt 第一次迭代且无工具调用
+  Agent -> Agent: _infer_tool_calls(user_message)
+  note right of Agent
+    **agent_engine.py:208-276**
+    正则表达式匹配
+  end note
+end alt
+
+== Act (行动) ==
+
+Agent -> Conv: add_assistant_message(response, tool_calls)
+activate Conv
+Conv --> Agent: 已添加
+deactivate Conv
+
+alt 有工具调用
+
+  loop 每个工具调用
+    Agent -> Tools: execute_tool(name, arguments)
+    activate Tools
+
+    Tools -> MCP: call_tool(name, arguments)
+    activate MCP
+    note right of MCP
+      **mcp/client.py**
+      HTTP POST to MCP Server
+      endpoint: /tools/call
+    end note
+    MCP --> Tools: ToolResult
+    deactivate MCP
+
+    Tools --> Agent: result
+    deactivate Tools
+
+    Agent -> Tools: format_tool_result(name, result)
+    activate Tools
+    note right of Tools
+      格式: [Tool: name] result
+    end note
+    Tools --> Agent: formatted_result
+    deactivate Tools
+
+    Agent -> Conv: add_tool_message(name, result)
+    activate Conv
+    Conv --> Agent: 已添加
+    deactivate Conv
+  end
+
+else 无工具调用
+
+  note right of Agent
+    **agent_engine.py:139-155**
+    无工具调用，准备返回响应
+  end note
+
+  Agent --> CLI: final_response
+  deactivate Agent
+  CLI -> User: 显示最终响应
+
+end alt
+
+@enduml

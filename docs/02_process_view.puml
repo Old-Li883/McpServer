@@ -1,0 +1,175 @@
+@startuml MCP Server - Process View
+title MCP Server 进程视图 (Process View)
+
+skinparam backgroundColor #FEFEFE
+
+skinparam state {
+    BackgroundColor #E3F2FD
+    BorderColor #1976D2
+}
+
+' =============================================
+' 启动序列
+' =============================================
+
+state "启动阶段" as Startup {
+    state "Load Config" as LoadConfig
+    state "Initialize Logger" as InitLogger
+    state "Create McpServerRunner" as CreateRunner
+    state "Register Methods" as RegMethods
+    state "Register Demo Items" as RegDemo
+
+    [*] --> LoadConfig
+    LoadConfig --> InitLogger : Config::getInstance()
+    InitLogger --> CreateRunner : new McpServerRunner(config)
+    CreateRunner --> RegMethods : mcpServer_->registerMethods()
+    RegMethods --> RegDemo : tools/resources/prompts
+}
+
+' =============================================
+' HTTP 模式
+' =============================================
+
+state "HTTP Mode" as HTTPMode {
+    state "HTTP Server\n(主线程)" as HTTPMain
+    state "Thread Pool" as HTTPThreads
+    state "Request Queue" as HTTPQ
+    state "JSON-RPC Handler" as HTTPJR
+
+    HTTPMain --> HTTPThreads : Accept Connection
+    HTTPThreads --> HTTPQ : Enqueue Request
+    HTTPQ --> HTTPJR : Process JSON-RPC
+    HTTPJR --> HTTPThreads : Return Response
+}
+
+' =============================================
+' STDIO 模式
+' =============================================
+
+state "STDIO Mode" as STDIOMode {
+    state "Main Thread\n(阻塞)" as STDMain
+    state "Background Read Thread" as STDRead
+    state "Message Queue" as STDQ
+    state "JSON-RPC Handler" as STDJR
+
+    STDMain --> STDRead : Start
+    STDRead --> STDQ : Parse LSP\nExtract JSON
+    STDQ --> STDJR : Process JSON-RPC
+    STDJR --> STDMain : Write Response\n(LSP Format)
+}
+
+' =============================================
+' BOTH 模式
+' =============================================
+
+state "BOTH Mode" as BOTHMode {
+    state "HTTP Background Thread" as BOTHHTTP
+    state "STDIO Main Thread" as BOTHSTDIO
+    state "Shared JSON-RPC Handler" as BOTHJR
+    state "Shared McpServer" as BOTHMCP
+
+    BOTHHTTP --> BOTHJR : HTTP Requests
+    BOTHSTDIO --> BOTHJR : STDIO Requests
+    BOTHJR --> BOTHMCP : Dispatch Methods
+    BOTHMCP --> BOTHJR : Return Results
+    BOTHJR --> BOTHHTTP : HTTP Responses
+    BOTHJR --> BOTHSTDIO : STDIO Responses
+}
+
+' =============================================
+' 请求处理流程
+' =============================================
+
+state "Request Processing Flow" as ReqFlow {
+    state "Deserialize" as Deserialize
+    state "Validate" as Validate
+    state "Route" as Route
+    state "Execute Handler" as Execute
+    state "Serialize Response" as Serialize
+
+    Deserialize --> Validate
+    Validate --> Route
+    Route --> Execute
+    Execute --> Serialize
+}
+
+' =============================================
+' 状态转换
+' =============================================
+
+Startup --> HTTPMode : config.serverMode == "http"
+Startup --> STDIOMode : config.serverMode == "stdio"
+Startup --> BOTHMode : config.serverMode == "both"
+
+HTTPMode --> ReqFlow : 处理每个请求
+STDIOMode --> ReqFlow : 处理每个请求
+BOTHMode --> ReqFlow : 处理每个请求
+
+' =============================================
+' 并发模型说明
+' =============================================
+
+note right of HTTPMode
+    <b>HTTP 模式并发模型:</b>
+
+    • 主线程: Accept 连接
+    • 工作线程池: 处理请求
+    • 每个连接: 独立处理
+    • 配置: thread_pool_size
+
+    适用: Web 服务场景
+end note
+
+note right of STDIOMode
+    <b>STDIO 模式并发模型:</b>
+
+    • 主线程: 阻塞读取 stdin
+    • 后台线程: 异步读取
+    • 消息队列: 线程安全
+    • 父进程: 管理生命周期
+
+    适用: Claude Desktop 等
+end note
+
+note right of BOTHMode
+    <b>BOTH 模式并发模型:</b>
+
+    • HTTP: 后台线程运行
+    • STDIO: 主线程运行
+    • 共享: JSON-RPC 处理器
+    • 同步: 互斥锁保护
+
+    适用: 混合部署场景
+end note
+
+note bottom of ReqFlow
+    <b>请求处理流水线:</b>
+
+    1. Deserialize: JSON → Request Object
+    2. Validate: 检查方法名/参数
+    3. Route: 查找方法处理器
+    4. Execute: 调用业务逻辑
+    5. Serialize: Result → JSON Response
+end note
+
+' =============================================
+' 线程安全
+' =============================================
+
+'note top of diagram
+'    <b>线程安全机制:</b>
+'    • ToolManager: std::mutex 保护 tools_ map
+'    • ResourceManager: std::mutex 保护 resources_ map
+'    • PromptManager: std::mutex 保护 prompts_ map
+'    • Message Queue: 线程安全队列实现
+'end note
+
+legend right
+    |<back:back: #FFF3E0> 橙色 | 启动阶段 |
+    |<back:back: #E8F5E9> 绿色 | HTTP 模式 |
+    |<back:back: #FFF9C4> 黄色 | STDIO 模式 |
+    |<back:back: #F3E5F5> 紫色 | BOTH 模式 |
+    |<back:back: #E0F2F1> 青色 | 请求处理流程 |
+endlegend
+
+@enduml
