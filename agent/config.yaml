@@ -10,7 +10,7 @@ mcp:
 
 llm:
   base_url: "http://localhost:11434"
-  model: "qwen2:0.5b"
+  model: "qwen2.5:7b"
   temperature: 0.3
   max_tokens: 2048
 
@@ -79,3 +79,15 @@ memory:
   # Retrieval configuration
   retrieval_top_k: 5
   retrieval_min_score: 0.5
+
+hr:
+  enabled: true
+  llm_model: "qwen2.5:7b"
+  db_path: "./data/hr.db"
+  chroma_collection: "hr_resumes"
+  parse_retries: 1
+  top_k_default: 5
+  score_weights:
+    education: 0.4
+    skills: 0.6
+

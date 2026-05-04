@@ -92,6 +92,20 @@ class MemoryConfig(BaseModel):
     retrieval_min_score: float = 0.5
 
 
+class HRConfig(BaseModel):
+    """HR module configuration."""
+
+    enabled: bool = True
+    llm_model: str = "qwen2.5:7b"
+    db_path: str = "./data/hr.db"
+    chroma_collection: str = "hr_resumes"
+    parse_retries: int = 1
+    top_k_default: int = 5
+    score_weights: dict[str, float] = Field(
+        default_factory=lambda: {"education": 0.4, "skills": 0.6}
+    )
+
+
 class Config(BaseModel):
     """Main configuration."""
 
@@ -102,6 +116,7 @@ class Config(BaseModel):
     cli: CliConfig = Field(default_factory=CliConfig)
     rag: RagConfig = Field(default_factory=RagConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    hr: HRConfig = Field(default_factory=HRConfig)
 
     @classmethod
     def from_yaml(cls, path: Path) -> "Config":
