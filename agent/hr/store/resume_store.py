@@ -7,9 +7,7 @@ import aiosqlite
 import chromadb
 
 from agent.hr.store.base import BaseStore
-from agent.hr.types import Resume
-
-DEGREE_ORDER = {"大专": 0, "本科": 1, "硕士": 2, "博士": 3}
+from agent.hr.types import Resume, DEGREE_ORDER
 
 CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS resumes (

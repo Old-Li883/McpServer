@@ -56,23 +56,9 @@ class HRMcpHandler:
         min_degree = filters.get("min_degree")
 
         if min_degree:
-            candidates = await self._engine._resume_store.filter_by_degree(min_degree)
-            semantic = await self._engine._resume_store.semantic_search(query, top_k=top_k * 2)
-            seen = {r.id for r in candidates}
-            for r in semantic:
-                if r.id not in seen:
-                    candidates.append(r)
-                    seen.add(r.id)
-            results = [
-                MatchResult(
-                    resume=r,
-                    overall_score=0.0,
-                    education_score=0.0,
-                    skills_score=0.0,
-                    match_details="语义搜索结果",
-                )
-                for r in candidates[:top_k]
-            ]
+            results = await self._engine.search_candidates_with_degree_filter(
+                query, min_degree=min_degree, top_k=top_k
+            )
         else:
             results = await self._engine.search_candidates(query, top_k=top_k)
         return json.dumps(self._format_results(results), ensure_ascii=False)

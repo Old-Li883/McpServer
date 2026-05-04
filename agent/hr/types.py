@@ -8,6 +8,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+DEGREE_ORDER: dict[str, int] = {"大专": 0, "本科": 1, "硕士": 2, "博士": 3}
+
 
 class Education(BaseModel):
     """Education record."""

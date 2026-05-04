@@ -1,8 +1,6 @@
 """Scoring algorithms for resume-JD matching."""
 
-from agent.hr.types import Resume, JdRequirements
-
-DEGREE_ORDER = {"大专": 0, "本科": 1, "硕士": 2, "博士": 3}
+from agent.hr.types import Resume, JdRequirements, DEGREE_ORDER
 
 
 class Scorer:

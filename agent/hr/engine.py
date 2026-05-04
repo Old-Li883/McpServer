@@ -129,6 +129,38 @@ class HREngine:
             for r in resumes
         ]
 
+    async def search_candidates_with_degree_filter(
+        self, query: str, min_degree: str, top_k: int | None = None
+    ) -> list[MatchResult]:
+        """Search candidates combining degree filter and semantic search.
+
+        Args:
+            query: Natural language search query.
+            min_degree: Minimum degree level (大专/本科/硕士/博士).
+            top_k: Number of candidates to return.
+
+        Returns:
+            List of MatchResult from combined filter and semantic search.
+        """
+        k = top_k or self._config.top_k_default
+        candidates = await self._resume_store.filter_by_degree(min_degree)
+        semantic = await self._resume_store.semantic_search(query, top_k=k * 2)
+        seen = {r.id for r in candidates}
+        for r in semantic:
+            if r.id not in seen:
+                candidates.append(r)
+                seen.add(r.id)
+        return [
+            MatchResult(
+                resume=r,
+                overall_score=0.0,
+                education_score=0.0,
+                skills_score=0.0,
+                match_details="语义搜索结果",
+            )
+            for r in candidates[:k]
+        ]
+
     def _extract_pdf_text(self, file_path: str) -> str:
         """Extract text from a PDF file using pdfplumber.
 
