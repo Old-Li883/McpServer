@@ -147,3 +147,15 @@ class MatchResult(BaseModel):
     education_score: float
     skills_score: float
     match_details: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary with proper datetime serialization."""
+        return self.model_dump(mode="json")
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "MatchResult":
+        """Create from dictionary, reconstructing nested Resume."""
+        if isinstance(data.get("resume"), dict):
+            data = dict(data)
+            data["resume"] = Resume.from_dict(data["resume"])
+        return cls(**data)

@@ -63,3 +63,26 @@ def test_match_result_fields():
         match_details="优势：学历匹配。不足：缺少Go经验。",
     )
     assert result.overall_score == 85.0
+
+
+def test_match_result_serialization():
+    edu = Education(school="X", degree="本科", major="CS")
+    resume = Resume(
+        id="r1", file_name="r.pdf", name="李四",
+        education=[edu], skills=[], experience=[], projects=[],
+        raw_text="", parsed_at=datetime(2026, 5, 1),
+    )
+    result = MatchResult(
+        resume=resume,
+        overall_score=85.0,
+        education_score=90.0,
+        skills_score=80.0,
+        match_details="优势：学历匹配。",
+    )
+    d = result.to_dict()
+    assert d["overall_score"] == 85.0
+    assert isinstance(d["resume"]["parsed_at"], str)  # datetime serialized to string
+    assert d["resume"]["name"] == "李四"
+    restored = MatchResult.from_dict(d)
+    assert restored.overall_score == 85.0
+    assert restored.resume.name == "李四"
