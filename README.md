@@ -1,30 +1,33 @@
 # McpServer
 
-基于 Model Context Protocol (MCP) 的双语言 AI Agent 系统，由 C++ 高性能 MCP 协议服务器和 Python 智能代理组成。支持本地大模型（Ollama）推理、RAG 文档检索和跨会话记忆。
+基于 Model Context Protocol (MCP) 的双语言 AI Agent 系统，由 C++ 高性能 MCP 协议服务器和 Python 智能代理组成。支持本地大模型（Ollama）推理、RAG 文档检索、跨会话记忆，以及 **HR 简历筛选 Agent**。
 
 ## 架构概览
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    Python Agent                          │
-│  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌────────────┐ │
-│  │ CLI 交互  │  │ ReAct引擎 │  │  RAG  │  │   Memory   │ │
-│  │prompt-kit │  │ LLM 调用  │  │ 文档检索│  │ 短期+长期  │ │
-│  └─────┬────┘  └─────┬────┘  └───────┘  └────────────┘ │
-│        └──────────────┼──────────────────────────────────┤
-│                  MCP Client (HTTP)                       │
-└───────────────────────┬─────────────────────────────────┘
-                        │ JSON-RPC 2.0
-┌───────────────────────┼─────────────────────────────────┐
-│                  C++ MCP Server                          │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐              │
-│  │   Tools   │  │Resources │  │ Prompts  │              │
-│  └──────────┘  └──────────┘  └──────────┘              │
-│  ┌──────────┐  ┌──────────┐                             │
-│  │   HTTP    │  │  Stdio   │                             │
-│  │ Transport │  │Transport │                             │
-│  └──────────┘  └──────────┘                             │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      Python Agent                             │
+│  ┌──────────┐  ┌──────────┐  ┌───────┐  ┌────────────────┐  │
+│  │ CLI 交互  │  │ ReAct引擎 │  │  RAG  │  │    Memory      │  │
+│  │prompt-kit │  │ LLM 调用  │  │ 文档检索│  │  短期+长期     │  │
+│  └──────────┘  └──────────┘  └───────┘  └────────────────┘  │
+│  ┌────────────────────────────────────────────────────────┐  │
+│  │                   HR Agent (agent/hr/)                  │  │
+│  │  ResumeParser · JdParser · ResumeStore · MatcherEngine  │  │
+│  └────────────────────────────────────────────────────────┘  │
+│                      MCP Client (HTTP)                        │
+└────────────────────────────┬─────────────────────────────────┘
+                             │ JSON-RPC 2.0
+┌────────────────────────────┼─────────────────────────────────┐
+│                      C++ MCP Server                           │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌─────────────┐  │
+│  │   Tools   │  │Resources │  │ Prompts  │  │  HR Tools   │  │
+│  └──────────┘  └──────────┘  └──────────┘  └─────────────┘  │
+│  ┌──────────┐  ┌──────────┐                                   │
+│  │   HTTP    │  │  Stdio   │                                   │
+│  │ Transport │  │Transport │                                   │
+│  └──────────┘  └──────────┘                                   │
+└───────────────────────────────────────────────────────────────┘
 ```
 
 ## 功能特性
@@ -37,6 +40,7 @@
 - **本地推理**：集成 Ollama，支持任意本地大模型
 - **RAG 检索增强**：文档加载（PDF/HTML/DOCX/TXT）、向量嵌入、ChromaDB 存储、相似度检索
 - **记忆系统**：短期对话记忆（带摘要压缩）+ 长期向量记忆（跨会话持久化）
+- **HR 简历筛选**：PDF 批量导入、LLM 结构化解析、JD 智能匹配、候选人语义搜索
 
 ## 快速开始
 
@@ -57,6 +61,9 @@ brew install nlohmann-json spdlog fmt cpp-httplib openssl googletest
 python3 -m venv venv
 source venv/bin/activate
 pip install -e agent/.[dev,rag]
+
+# HR 模块额外依赖
+pip install pdfplumber aiosqlite chromadb
 ```
 
 ### 构建 & 运行
@@ -123,9 +130,17 @@ bash scripts/install_hooks.sh
 │   │   ├── embeddings/           # 向量嵌入
 │   │   ├── storage/              # ChromaDB 存储
 │   │   └── core/                 # 检索引擎
-│   └── memory/                   # 记忆系统
-│       ├── short_term/           # 对话历史
-│       └── long_term/            # 向量长期记忆
+│   ├── memory/                   # 记忆系统
+│   │   ├── short_term/           # 对话历史
+│   │   └── long_term/            # 向量长期记忆
+│   └── hr/                       # HR 简历筛选模块
+│       ├── types.py              # 数据模型（Resume, JobDescription, MatchResult）
+│       ├── engine.py             # HREngine 统一入口
+│       ├── mcp_handler.py        # MCP 工具路由
+│       ├── config.py             # HR 模块配置
+│       ├── parser/               # 简历/JD 解析器（LLM 结构化提取）
+│       ├── store/                # SQLite + ChromaDB 双存储
+│       └── matcher/              # 评分与匹配引擎
 ├── tests/                        # C++ & Python 测试
 ├── config/                       # 配置模块
 ├── scripts/                      # 自动化脚本

@@ -185,6 +185,112 @@ void registerExamplePrompts(McpServerRunner& runner) {
 }
 
 /**
+ * @brief 注册 HR 简历筛选工具
+ */
+void registerHRTools(McpServerRunner& runner) {
+    // hr_import_resumes
+    runner.registerTool(
+        "hr_import_resumes",
+        "批量导入 PDF 简历。支持传入单个文件路径或目录路径，自动解析并存储。",
+        ToolInputSchema{
+            {"type", "object"},
+            {
+                {"properties", {
+                    {"path", {{"type", "string"}, {"description", "PDF 文件路径或包含 PDF 的目录路径"}}},
+                    {"force_reparse", {{"type", "boolean"}, {"description", "是否强制重新解析已存在的简历"}, {"default", false}}}
+                }},
+                {"required", {"path"}}
+            }
+        },
+        [](const std::string& name, const nlohmann::json& args) -> ToolResult {
+            if (!args.contains("path") || !args["path"].is_string()) {
+                return ToolResult::error("参数错误：缺少必填字段 path");
+            }
+            nlohmann::json payload = {{"tool", name}, {"args", args}};
+            return ToolResult::success({ContentItem::text_content(payload.dump())});
+        }
+    );
+
+    // hr_parse_resume
+    runner.registerTool(
+        "hr_parse_resume",
+        "解析单份 PDF 简历，返回结构化信息（姓名、学历、技能等）。如果简历已导入，直接从数据库返回。",
+        ToolInputSchema{
+            {"type", "object"},
+            {
+                {"properties", {
+                    {"file_path", {{"type", "string"}, {"description", "PDF 文件路径"}}}
+                }},
+                {"required", {"file_path"}}
+            }
+        },
+        [](const std::string& name, const nlohmann::json& args) -> ToolResult {
+            if (!args.contains("file_path") || !args["file_path"].is_string()) {
+                return ToolResult::error("参数错误：缺少必填字段 file_path");
+            }
+            nlohmann::json payload = {{"tool", name}, {"args", args}};
+            return ToolResult::success({ContentItem::text_content(payload.dump())});
+        }
+    );
+
+    // hr_search_candidates
+    runner.registerTool(
+        "hr_search_candidates",
+        "按条件搜索候选人。支持自然语言查询和结构化过滤。",
+        ToolInputSchema{
+            {"type", "object"},
+            {
+                {"properties", {
+                    {"query", {{"type", "string"}, {"description", "搜索查询，如'会Python的计算机专业本科生'"}}},
+                    {"filters", {
+                        {"type", "object"},
+                        {"properties", {
+                            {"min_degree", {{"type", "string"}}},
+                            {"majors", {{"type", "array"}, {"items", {{"type", "string"}}}}},
+                            {"skills", {{"type", "array"}, {"items", {{"type", "string"}}}}}
+                        }}
+                    }},
+                    {"top_k", {{"type", "integer"}, {"description", "返回结果数"}, {"default", 5}}}
+                }},
+                {"required", {"query"}}
+            }
+        },
+        [](const std::string& name, const nlohmann::json& args) -> ToolResult {
+            if (!args.contains("query") || !args["query"].is_string()) {
+                return ToolResult::error("参数错误：缺少必填字段 query");
+            }
+            nlohmann::json payload = {{"tool", name}, {"args", args}};
+            return ToolResult::success({ContentItem::text_content(payload.dump())});
+        }
+    );
+
+    // hr_match_jd
+    runner.registerTool(
+        "hr_match_jd",
+        "根据岗位 JD 匹配候选人。自动解析 JD 需求，在简历库中搜索评分排序，返回最匹配的候选人。",
+        ToolInputSchema{
+            {"type", "object"},
+            {
+                {"properties", {
+                    {"jd_text", {{"type", "string"}, {"description", "岗位 JD 全文"}}},
+                    {"top_k", {{"type", "integer"}, {"description", "返回候选人数量"}, {"default", 5}}}
+                }},
+                {"required", {"jd_text"}}
+            }
+        },
+        [](const std::string& name, const nlohmann::json& args) -> ToolResult {
+            if (!args.contains("jd_text") || !args["jd_text"].is_string()) {
+                return ToolResult::error("参数错误：缺少必填字段 jd_text");
+            }
+            nlohmann::json payload = {{"tool", name}, {"args", args}};
+            return ToolResult::success({ContentItem::text_content(payload.dump())});
+        }
+    );
+
+    LOG_INFO("Registered {} HR tools", 4);
+}
+
+/**
  * @brief 打印服务器信息
  */
 void printServerInfo(const McpServerRunner& runner) {
@@ -257,6 +363,7 @@ int main(int argc, char* argv[]) {
     registerExampleTools(runner);
     registerExampleResources(runner);
     registerExamplePrompts(runner);
+    registerHRTools(runner);
 
     // 打印服务器信息
     printServerInfo(runner);
